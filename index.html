@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Photo → Gradient Background</title>
+<style>
+  :root{--bg:#0e0e10;--panel:#17171b;--line:#2a2a31;--fg:#eaeaea;--mut:#9a9aa3;--acc:#c9b8ff;}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px;display:grid;gap:20px;grid-template-columns:1fr}
+  @media(min-width:820px){.wrap{grid-template-columns:420px 1fr}}
+  h1{font-size:16px;margin:0 0 4px;letter-spacing:.2px}
+  p.sub{color:var(--mut);margin:0 0 16px;font-size:12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  label{display:block;font-size:12px;color:var(--mut);margin:14px 0 6px}
+  input[type=file]{width:100%;color:var(--fg)}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .seg{display:flex;background:#111;border:1px solid var(--line);border-radius:10px;overflow:hidden;width:100%}
+  .seg button{flex:1;background:transparent;color:var(--fg);border:0;padding:8px 4px;font-size:11px;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--acc);color:#111;font-weight:600}
+  input[type=range]{width:100%}
+  .palette{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .sw{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .sw b{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);display:block}
+  .sw span{font-size:10px;color:var(--mut);font-family:ui-monospace,monospace}
+  .stage{display:flex;justify-content:center;align-items:flex-start}
+  .frame{position:relative;width:min(100%,360px);aspect-ratio:9/16;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:#000}
+  .frame canvas.bg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .frame img.photo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:78%;max-height:72%;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .actions{display:flex;gap:8px;margin-top:12px}
+  button.btn{background:var(--acc);color:#111;border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+  .val{color:var(--fg);float:right;font-variant-numeric:tabular-nums}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .modal.on{display:flex}
+  .modal-inner{background:var(--panel);border-radius:14px;padding:16px;max-width:420px;width:100%;max-height:90vh;overflow:auto}
+  .modal-inner h2{font-size:15px;margin:0 0 8px}
+  .modal-inner p{font-size:12px;color:var(--mut);margin:0 0 12px;line-height:1.5}
+  .modal-inner img{width:100%;border-radius:10px;display:block;margin-bottom:12px}
+  .modal-inner .close{width:100%}
+  .hint{font-size:11px;color:var(--mut);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="modal" id="saveModal">
+  <div class="modal-inner">
+    <h2>이미지 저장</h2>
+    <p>아래 이미지를 <b>길게 눌러</b> "사진에 추가"를 선택하기 바람. (iOS) · PC는 우클릭 → "이미지 저장".</p>
+    <img id="saveImg" alt="gradient background"/>
+    <button class="btn close" id="closeModal">닫기</button>
+  </div>
+</div>
+<div class="wrap">
+  <section class="panel">
+    <h1>Photo → Gradient Background</h1>
+    <p class="sub">사진의 지배색을 추출해 9:16 배경을 생성함. 사진은 색 스포이드로만 사용됨.</p>
+
+    <label>이미지 업로드</label>
+    <input id="file" type="file" accept="image/*"/>
+    <div class="actions" style="margin-top:10px">
+      <button class="btn" id="apply" disabled>미리보기 적용</button>
+      <button class="btn ghost" id="clear">초기화</button>
+    </div>
+    <div class="hint" id="fileStatus">파일을 선택한 뒤 "미리보기 적용"을 눌러야 반영됨.</div>
+
+    <label>그라데이션 방식</label>
+    <div class="seg" id="modeSeg">
+      <button data-v="linear" class="on">선형</button>
+      <button data-v="radial">방사형</button>
+      <button data-v="mesh">메쉬</button>
+      <button data-v="conic">코닉</button>
+      <button data-v="watercolor">수채화</button>
+    </div>
+
+    <label>채도 <span class="val" id="satV">100%</span></label>
+    <input id="sat" type="range" min="40" max="300" value="100"/>
+
+    <label>번짐(블러) <span class="val" id="blurV">60px</span></label>
+    <input id="blur" type="range" min="0" max="160" value="60"/>
+
+    <label>거침(종이 질감·안료 농도) <span class="val" id="roughV">50%</span></label>
+    <input id="rough" type="range" min="0" max="200" value="50"/>
+
+    <label>색 개수 <span class="val" id="kV">4</span></label>
+    <input id="k" type="range" min="2" max="6" value="4"/>
+
+    <label>각도 (선형/코닉) <span class="val" id="angV">135°</span></label>
+    <input id="ang" type="range" min="0" max="360" value="135"/>
+
+    <label>빛망울(보케)</label>
+    <div class="seg" id="bokehSeg">
+      <button data-v="on" class="on">켜짐</button>
+      <button data-v="off">꺼짐</button>
+    </div>
+
+    <label>추출된 팔레트</label>
+    <div class="palette" id="pal"></div>
+
+    <div class="actions">
+      <button class="btn" id="dl">이미지 저장 (1080×1920)</button>
+      <button class="btn ghost" id="shuffle">시드 변경</button>
+      <button class="btn ghost" id="randomAll">🎲 전체 랜덤</button>
+    </div>
+    <div class="hint">Tip: 사진을 바꾸지 않고도 옵션만 조절해 여러 버전을 뽑을 수 있음.</div>
+  </section>
+
+  <section class="stage">
+    <div class="frame">
+      <canvas class="bg" id="bg" width="1080" height="1920"></canvas>
+      <img class="photo" id="photo" alt=""/>
+    </div>
+  </section>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const state={mode:'linear',sat:1,blur:60,rough:0.5,k:4,ang:135,bokeh:true,seed:Math.random(),palette:['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']};
+
+function setSeg(id,key){
+  document.querySelectorAll(`#${id} button`).forEach(b=>{
+    b.classList.toggle('on',b.dataset.v===String(state[key]));
+    b.onclick=()=>{state[key]=b.dataset.v==='on'?true:b.dataset.v==='off'?false:b.dataset.v;setSeg(id,key);render();};
+  });
+}
+setSeg('modeSeg','mode');
+document.querySelectorAll('#bokehSeg button').forEach(b=>{
+  b.classList.toggle('on',(state.bokeh?'on':'off')===b.dataset.v);
+  b.onclick=()=>{state.bokeh=b.dataset.v==='on';document.querySelectorAll('#bokehSeg button').forEach(x=>x.classList.toggle('on',x===b));render();};
+});
+
+const bindRange=(id,key,fmt)=>{const el=$('#'+id),v=$('#'+id+'V');const up=()=>{state[key]=(key==='sat'||key==='rough')?el.value/100:+el.value;v.textContent=fmt(el.value);render();};el.addEventListener('input',up);up();};
+bindRange('sat','sat',x=>x+'%');
+bindRange('blur','blur',x=>x+'px');
+bindRange('rough','rough',x=>x+'%');
+bindRange('k','k',x=>x);
+bindRange('ang','ang',x=>x+'°');
+
+$('#shuffle').onclick=()=>{state.seed=Math.random();render();};
+
+$('#randomAll').onclick=()=>{
+  const modes=['linear','radial','mesh','conic','watercolor'];
+  const pickMode=modes[Math.floor(Math.random()*modes.length)];
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const randInt=(a,b)=>Math.floor(rand(a,b+1));
+
+  // 색 팔레트를 임의로 생성: HSL 공간에서 조화롭게 뽑음
+  const baseHue=Math.random()*360;
+  const scheme=['analogous','complementary','triadic','random'][Math.floor(Math.random()*4)];
+  const numColors=randInt(3,6);
+  const newPal=[];
+  for(let i=0;i<numColors;i++){
+    let h;
+    if(scheme==='analogous')h=(baseHue+i*rand(15,35))%360;
+    else if(scheme==='complementary')h=(baseHue+(i%2)*180+rand(-20,20))%360;
+    else if(scheme==='triadic')h=(baseHue+(i%3)*120+rand(-15,15))%360;
+    else h=Math.random()*360;
+    const s=rand(0.45,0.9);
+    const l=rand(0.35,0.7);
+    const [r,g,b]=hsl2rgb(h,s,l);
+    newPal.push(rgb2hex(r|0,g|0,b|0));
+  }
+  state.palette=newPal;
+
+  state.mode=pickMode;
+  state.seed=Math.random();
+  state.bokeh=Math.random()<0.7;
+  const setSlider=(id,val)=>{const el=$('#'+id);el.value=val;el.dispatchEvent(new Event('input'));};
+  if(pickMode==='watercolor'){
+    setSlider('sat',randInt(140,260));
+    setSlider('blur',randInt(0,20));
+    setSlider('rough',randInt(70,180));
+    setSlider('k',Math.min(numColors,randInt(3,5)));
+  } else {
+    setSlider('sat',randInt(80,180));
+    setSlider('blur',randInt(30,140));
+    setSlider('rough',randInt(20,80));
+    setSlider('k',Math.min(numColors,randInt(2,6)));
+  }
+  setSlider('ang',randInt(0,360));
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===state.mode));
+  document.querySelectorAll('#bokehSeg button').forEach(b=>b.classList.toggle('on',(state.bokeh?'on':'off')===b.dataset.v));
+  render();
+};
+
+// color extract: sample + k-means-ish bucketing by hue
+function extract(img,k){
+  const c=document.createElement('canvas');
+  const W=120,H=Math.max(1,Math.round(120*img.naturalHeight/img.naturalWidth));
+  c.width=W;c.height=H;const x=c.getContext('2d');
+  try{x.drawImage(img,0,0,W,H);}catch(e){console.warn('drawImage failed',e);return[];}
+  let d;try{d=x.getImageData(0,0,W,H).data;}catch(e){console.warn('getImageData failed (CORS?)',e);return[];}
+  // two-pass: prefer saturated, fallback to all
+  const pass=(minS,minL,maxL)=>{
+    const b={};
+    for(let i=0;i<d.length;i+=4){
+      const r=d[i],g=d[i+1],bl=d[i+2],a=d[i+3];if(a<200)continue;
+      const [h,s,l]=rgb2hsl(r,g,bl);if(l<minL||l>maxL)continue;if(s<minS)continue;
+      const key=Math.round(h/18)*18+'-'+Math.round(l*5);
+      if(!b[key])b[key]={n:0,r:0,g:0,b:0};
+      const o=b[key];o.n++;o.r+=r;o.g+=g;o.b+=bl;
+    }
+    return Object.values(b).map(o=>({n:o.n,rgb:[o.r/o.n,o.g/o.n,o.b/o.n]})).sort((a,b)=>b.n-a.n);
+  };
+  let arr=pass(0.12,0.08,0.95);
+  if(arr.length<k)arr=pass(0.04,0.05,0.97);
+  if(arr.length<k)arr=pass(0,0.02,0.99);
+  const out=arr.slice(0,k).map(o=>rgb2hex(...o.rgb.map(Math.round)));
+  while(out.length<k&&out.length>0)out.push(out[out.length-1]);
+  return out;
+}
+function rgb2hsl(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);switch(mx){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;}h*=60;}return[h,s,l];}
+function hsl2rgb(h,s,l){h/=360;const hue2=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};let r,g,b;if(s===0)r=g=b=l;else{const q=l<.5?l*(1+s):l+s-l*s;const p=2*l-q;r=hue2(p,q,h+1/3);g=hue2(p,q,h);b=hue2(p,q,h-1/3);}return[r*255,g*255,b*255];}
+function rgb2hex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,v|0)).toString(16).padStart(2,'0')).join('');}
+function hex2rgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function adjustSat(hex,mult){const [r,g,b]=hex2rgb(hex);const [h,s,l]=rgb2hsl(r,g,b);const ns=Math.max(0,Math.min(1,s*mult));const [r2,g2,b2]=hsl2rgb(h,ns,l);return rgb2hex(r2|0,g2|0,b2|0);}
+
+// seeded rng
+function rng(seed){let s=Math.floor(seed*1e9)||1;return()=>{s=(s*1664525+1013904223)%4294967296;return s/4294967296;};}
+
+function paintBackground(ctx,W,H,colors,opts){
+  const {mode,blur,rough,ang,bokeh,seed}=opts;
+  const R=typeof rough==='number'?rough:0.5; // 0~2
+  const rand=rng(seed);
+  ctx.clearRect(0,0,W,H);
+  // base fill with first color to avoid edges
+  ctx.fillStyle=colors[0];ctx.fillRect(0,0,W,H);
+
+  if(mode==='linear'){
+    const rad=ang*Math.PI/180;
+    const cx=W/2,cy=H/2;const len=Math.hypot(W,H);
+    const x1=cx-Math.cos(rad)*len/2,y1=cy-Math.sin(rad)*len/2;
+    const x2=cx+Math.cos(rad)*len/2,y2=cy+Math.sin(rad)*len/2;
+    const g=ctx.createLinearGradient(x1,y1,x2,y2);
+    colors.forEach((c,i)=>g.addColorStop(i/(colors.length-1||1),c));
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  } else if(mode==='radial'){
+    colors.forEach((c,i)=>{
+      const r=Math.max(W,H)*(1-i/colors.length)*0.8;
+      const cx=W*(0.3+rand()*0.4),cy=H*(0.3+rand()*0.4);
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+      g.addColorStop(0,c);g.addColorStop(1,c+'00');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    });
+  } else if(mode==='mesh'){
+    // stacked large radial blobs (mesh-like)
+    for(let i=0;i<colors.length*2;i++){
+      const c=colors[i%colors.length];
+      const cx=rand()*W,cy=rand()*H;
+      const r=(0.4+rand()*0.5)*Math.max(W,H);
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+      g.addColorStop(0,c);g.addColorStop(1,c+'00');
+      ctx.globalAlpha=0.85;ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    }
+    ctx.globalAlpha=1;
+  } else if(mode==='conic'){
+    // emulate conic via many thin wedges
+    const cx=W/2,cy=H/2;const steps=120;const start=ang*Math.PI/180;
+    for(let i=0;i<steps;i++){
+      const t=i/steps;const a1=start+t*Math.PI*2;const a2=start+(t+1/steps)*Math.PI*2;
+      const idx=t*colors.length;const i0=Math.floor(idx)%colors.length,i1=(i0+1)%colors.length;
+      const f=idx-Math.floor(idx);
+      const [r1,g1,b1]=hex2rgb(colors[i0]),[r2,g2,b2]=hex2rgb(colors[i1]);
+      const col=`rgb(${(r1+(r2-r1)*f)|0},${(g1+(g2-g1)*f)|0},${(b1+(b2-b1)*f)|0})`;
+      ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,Math.hypot(W,H),a1,a2);ctx.closePath();ctx.fill();
+    }
+  } else if(mode==='watercolor'){
+    ctx.fillStyle='#f7f2e8';ctx.fillRect(0,0,W,H);
+    const diag=Math.hypot(W,H);
+    const densityBoost=0.9+R*1.2;
+
+    // 색마다 큰 영역을 할당 (Voronoi-like seed 배치)
+    const seeds=[];
+    const N=colors.length;
+    const minDist=Math.min(W,H)*0.35;
+    let tries=0;
+    while(seeds.length<N&&tries<300){
+      const sx=W*(0.15+Math.random()*0.7),sy=H*(0.15+Math.random()*0.7);
+      if(seeds.every(s=>Math.hypot(s.x-sx,s.y-sy)>minDist))seeds.push({x:sx,y:sy});
+      tries++;
+    }
+    while(seeds.length<N)seeds.push({x:rand()*W,y:rand()*H});
+
+    // 각 색을 큰 유기적 영역으로 칠함 (많은 닥을 서로 다른 반경으로 쌓기)
+    const shuffled=colors.map((c,i)=>({c,i})).sort(()=>rand()-0.5);
+    shuffled.forEach(({c,i})=>{
+      const [r,g,b]=hex2rgb(c);
+      const seed=seeds[i];
+      const regionR=diag*0.32; // 큰 영역 반경
+      // 해당 색 영역에 수백 개의 닥 뿌리기
+      const dabs=200+Math.round(R*150);
+      for(let d=0;d<dabs;d++){
+        // seed 근처에 집중, 일부는 멀리까지 튀김
+        const t=Math.pow(rand(),0.7); // 0~1, 바깥으로 약하게 편향
+        const theta=rand()*Math.PI*2;
+        const dist=t*regionR*(1+rand()*0.3);
+        const dx=Math.cos(theta)*dist;
+        const dy=Math.sin(theta)*dist;
+        const px=seed.x+dx,py=seed.y+dy;
+        const dabR=diag*(0.02+rand()*0.07);
+        // 중심에 가까우면 진하게, 멀어지면 투명
+        const falloff=Math.max(0,1-dist/regionR);
+        const alpha=Math.min(0.85,0.12*falloff*densityBoost+0.03);
+        const grd=ctx.createRadialGradient(px,py,0,px,py,dabR);
+        grd.addColorStop(0,`rgba(${r},${g},${b},${alpha})`);
+        grd.addColorStop(1,`rgba(${r},${g},${b},0)`); // 반드시 0으로 끝
+        ctx.fillStyle=grd;
+        ctx.fillRect(px-dabR,py-dabR,dabR*2,dabR*2);
+      }
+      // 중심부에 안료 집중 (진한 코어)
+      const coreR=regionR*0.45;
+      const coreGrd=ctx.createRadialGradient(seed.x,seed.y,0,seed.x,seed.y,coreR);
+      coreGrd.addColorStop(0,`rgba(${r},${g},${b},${Math.min(0.75,0.55*densityBoost)})`);
+      coreGrd.addColorStop(0.6,`rgba(${r},${g},${b},${Math.min(0.5,0.3*densityBoost)})`);
+      coreGrd.addColorStop(1,`rgba(${r},${g},${b},0)`);
+      ctx.fillStyle=coreGrd;
+      ctx.fillRect(seed.x-coreR,seed.y-coreR,coreR*2,coreR*2);
+    });
+
+    // 색 경계에 안료 응집 (multiply 블렌드로 기존 색을 어둡게)
+    // 여러 색이 겹친 곳이 자연스럽게 어두워짐
+    ctx.globalCompositeOperation='multiply';
+    ctx.globalAlpha=Math.min(0.6,0.2+R*0.35);
+    shuffled.forEach(({c,i})=>{
+      const [r,g,b]=hex2rgb(c);
+      const seed=seeds[i];
+      const dark=diag*0.18;
+      const darkDabs=30+Math.round(R*30);
+      for(let d=0;d<darkDabs;d++){
+        const theta=rand()*Math.PI*2;
+        const t=0.5+rand()*0.5; // 중간~바깥
+        const px=seed.x+Math.cos(theta)*dark*t*2.2;
+        const py=seed.y+Math.sin(theta)*dark*t*2.2;
+        const dabR=diag*(0.03+rand()*0.06);
+        const grd=ctx.createRadialGradient(px,py,0,px,py,dabR);
+        grd.addColorStop(0,`rgba(${Math.max(0,r*0.3)|0},${Math.max(0,g*0.3)|0},${Math.max(0,b*0.3)|0},0.35)`);
+        grd.addColorStop(1,`rgba(0,0,0,0)`);
+        ctx.fillStyle=grd;
+        ctx.fillRect(px-dabR,py-dabR,dabR*2,dabR*2);
+      }
+    });
+    ctx.globalAlpha=1;
+    ctx.globalCompositeOperation='source-over';
+
+    // 종이 질감 (2-옥타브 노이즈)
+    const grainCanvas=document.createElement('canvas');
+    grainCanvas.width=W;grainCanvas.height=H;
+    const gctx=grainCanvas.getContext('2d');
+    const gImg=gctx.createImageData(W,H);
+    const gd=gImg.data;
+    const coarseScale=4;
+    const coarseW=Math.ceil(W/coarseScale);
+    const coarseNoise=[];
+    for(let i=0;i<Math.ceil(H/coarseScale)*coarseW;i++)coarseNoise.push(rand());
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        const idx=(y*W+x)*4;
+        const fine=rand();
+        const coarse=coarseNoise[Math.floor(y/coarseScale)*coarseW+Math.floor(x/coarseScale)];
+        const n=(fine*0.45+coarse*0.55)*255|0;
+        gd[idx]=gd[idx+1]=gd[idx+2]=n;
+        gd[idx+3]=Math.min(150,40+R*70);
+      }
+    }
+    gctx.putImageData(gImg,0,0);
+    ctx.globalCompositeOperation='overlay';
+    ctx.globalAlpha=Math.min(1,0.5+R*0.4);
+    ctx.drawImage(grainCanvas,0,0);
+    ctx.globalCompositeOperation='multiply';
+    ctx.globalAlpha=Math.min(0.85,0.3+R*0.45);
+    ctx.drawImage(grainCanvas,0,0);
+    ctx.globalAlpha=1;
+    ctx.globalCompositeOperation='source-over';
+  }
+
+
+  // bokeh highlights (수채화 모드 제외)
+  if(bokeh&&mode!=='watercolor'){
+    const n=1+Math.round(rand());
+    for(let i=0;i<n;i++){
+      let cx,cy;do{cx=rand()*W;cy=rand()*H;}while(Math.hypot(cx-W/2,cy-H/2)<Math.min(W,H)*0.2);
+      const r=Math.max(W,H)*(0.15+rand()*0.1);
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+      g.addColorStop(0,'rgba(255,255,255,0.35)');g.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    }
+  }
+}
+
+function renderPalette(){
+  const p=$('#pal');p.innerHTML='';
+  state.palette.forEach(c=>{
+    const w=document.createElement('div');w.className='sw';
+    const b=document.createElement('b');b.style.background=c;
+    const s=document.createElement('span');s.textContent=c.toUpperCase();
+    w.appendChild(b);w.appendChild(s);p.appendChild(w);
+  });
+}
+
+function render(){
+  const canvas=$('#bg');const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const k=Math.min(+state.k,state.palette.length||+state.k);
+  const cols=(state.palette.slice(0,k).length?state.palette.slice(0,k):['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']).map(c=>adjustSat(c,state.sat));
+  const off=document.createElement('canvas');off.width=W;off.height=H;
+  paintBackground(off.getContext('2d'),W,H,cols,{mode:state.mode,blur:state.blur,rough:state.rough,ang:+state.ang,bokeh:state.bokeh,seed:state.seed});
+  ctx.clearRect(0,0,W,H);
+  // 수채화 모드는 종이 질감을 보존하기 위해 최종 블러를 크게 억제
+  const finalBlur=state.mode==='watercolor'?Math.min(state.blur*0.15,12):state.blur;
+  ctx.filter=`blur(${finalBlur}px) saturate(${state.sat})`;
+  const pad=Math.max(40,finalBlur*2);
+  ctx.drawImage(off,-pad,-pad,W+pad*2,H+pad*2);
+  ctx.filter='none';
+  renderPalette();
+}
+
+let pendingFile=null;
+const status=$('#fileStatus');
+const applyBtn=$('#apply');
+
+$('#file').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(!f){pendingFile=null;applyBtn.disabled=true;status.textContent='파일을 선택한 뒤 "미리보기 적용"을 눌러야 반영됨.';return;}
+  pendingFile=f;
+  applyBtn.disabled=false;
+  status.textContent=`선택됨: ${f.name} (${(f.size/1024).toFixed(0)}KB) · "미리보기 적용"을 누르면 반영됨.`;
+});
+
+async function decodeFile(file){
+  // try createImageBitmap first (most reliable)
+  try{
+    const bmp=await createImageBitmap(file);
+    const c=document.createElement('canvas');
+    c.width=bmp.width;c.height=bmp.height;
+    c.getContext('2d').drawImage(bmp,0,0);
+    return c;
+  }catch(e1){
+    // fallback to Image + blob URL
+    return new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(file);
+      const img=new Image();
+      img.onload=()=>{
+        const c=document.createElement('canvas');
+        c.width=img.naturalWidth;c.height=img.naturalHeight;
+        c.getContext('2d').drawImage(img,0,0);
+        URL.revokeObjectURL(url);resolve(c);
+      };
+      img.onerror=ev=>{URL.revokeObjectURL(url);reject(new Error('Image load failed'));};
+      img.src=url;
+    });
+  }
+}
+
+applyBtn.addEventListener('click',async ()=>{
+  if(!pendingFile)return;
+  status.textContent='처리 중...';applyBtn.disabled=true;
+  try{
+    const decoded=await decodeFile(pendingFile);
+    // display photo
+    const dispUrl=URL.createObjectURL(pendingFile);
+    $('#photo').src=dispUrl;
+    // extract from the decoded canvas directly
+    const pal=extractFromCanvas(decoded,6);
+    if(pal.length>=2){
+      state.palette=pal;
+      status.textContent=`적용됨 · 추출된 색 ${pal.length}개: ${pal.join(', ')}`;
+    } else {
+      status.textContent=`색상 추출 실패 (${pal.length}개). 다른 이미지로 시도 바람.`;
+    }
+    render();
+  }catch(err){
+    console.error(err);
+    status.textContent='디코딩 실패: '+(err.message||err);
+    alert('이미지 디코딩 실패. HEIC 등 비지원 포맷일 수 있음. JPEG/PNG로 시도 바람.');
+  }finally{
+    applyBtn.disabled=!pendingFile;
+  }
+});
+
+$('#clear').addEventListener('click',()=>{
+  pendingFile=null;
+  $('#file').value='';
+  $('#photo').removeAttribute('src');
+  state.palette=['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9'];
+  applyBtn.disabled=true;
+  status.textContent='초기화됨. 새 파일을 선택하기 바람.';
+  render();
+});
+
+function extractFromCanvas(src,k){
+  const W=120,H=Math.max(1,Math.round(120*src.height/src.width));
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');x.drawImage(src,0,0,W,H);
+  let d;try{d=x.getImageData(0,0,W,H).data;}catch(e){console.warn('getImageData failed',e);return[];}
+  const pass=(minS,minL,maxL)=>{
+    const b={};
+    for(let i=0;i<d.length;i+=4){
+      const r=d[i],g=d[i+1],bl=d[i+2],a=d[i+3];if(a<200)continue;
+      const [h,s,l]=rgb2hsl(r,g,bl);if(l<minL||l>maxL)continue;if(s<minS)continue;
+      const key=Math.round(h/18)*18+'-'+Math.round(l*5);
+      if(!b[key])b[key]={n:0,r:0,g:0,b:0};
+      const o=b[key];o.n++;o.r+=r;o.g+=g;o.b+=bl;
+    }
+    return Object.values(b).map(o=>({n:o.n,rgb:[o.r/o.n,o.g/o.n,o.b/o.n]})).sort((a,b)=>b.n-a.n);
+  };
+  let arr=pass(0.12,0.08,0.95);
+  if(arr.length<k)arr=pass(0.04,0.05,0.97);
+  if(arr.length<k)arr=pass(0,0.02,0.99);
+  const out=arr.slice(0,k).map(o=>rgb2hex(...o.rgb.map(Math.round)));
+  while(out.length<k&&out.length>0)out.push(out[out.length-1]);
+  return out;
+}
+
+$('#dl').onclick=()=>{
+  // data URL을 써야 WebView에서 길게 눌러 저장이 가장 확실하게 동작함
+  const dataUrl=$('#bg').toDataURL('image/png');
+  $('#saveImg').src=dataUrl;
+  $('#saveModal').classList.add('on');
+};
+$('#closeModal').onclick=()=>$('#saveModal').classList.remove('on');
+$('#saveModal').addEventListener('click',e=>{if(e.target.id==='saveModal')$('#saveModal').classList.remove('on');});
+
+render();
+</script>
+</body>
+</html>
