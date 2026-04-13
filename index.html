@@ -92,7 +92,7 @@
     <input id="blur" type="range" min="0" max="160" value="60"/>
 
     <label>거침(종이 질감·안료 농도) <span class="val" id="roughV">50%</span></label>
-    <input id="rough" type="range" min="0" max="200" value="50"/>
+    <input id="rough" type="range" min="0" max="120" value="50"/>
 
     <label>색 개수 <span class="val" id="kV">4</span></label>
     <input id="k" type="range" min="2" max="6" value="4"/>
@@ -112,6 +112,7 @@
     <div class="actions">
       <button class="btn" id="dl">이미지 저장 (1080×1920)</button>
       <button class="btn ghost" id="shuffle">시드 변경</button>
+      <button class="btn ghost" id="reshuffle">🎨 배치 변경</button>
       <button class="btn ghost" id="randomAll">🎲 전체 랜덤</button>
     </div>
     <div class="hint">Tip: 사진을 바꾸지 않고도 옵션만 조절해 여러 버전을 뽑을 수 있음.</div>
@@ -149,6 +150,18 @@ bindRange('k','k',x=>x);
 bindRange('ang','ang',x=>x+'°');
 
 $('#shuffle').onclick=()=>{state.seed=Math.random();render();};
+
+$('#reshuffle').onclick=()=>{
+  // 현재 팔레트 색 순서를 섞고 시드도 바꿔 배치 변경
+  const p=[...state.palette];
+  for(let i=p.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [p[i],p[j]]=[p[j],p[i]];
+  }
+  state.palette=p;
+  state.seed=Math.random();
+  render();
+};
 
 $('#randomAll').onclick=()=>{
   const modes=['linear','radial','mesh','conic','airy','watercolor'];
@@ -323,75 +336,95 @@ function paintBackground(ctx,W,H,colors,opts){
       ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
     }
   } else if(mode==='watercolor'){
-    ctx.fillStyle='#f7f2e8';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fefcf6';ctx.fillRect(0,0,W,H); // 한지 톤
     const diag=Math.hypot(W,H);
-    const densityBoost=0.9+R*1.2;
+    const densityBoost=0.9+R*1.0;
 
-    // 색마다 큰 영역을 할당 (Voronoi-like seed 배치)
     const seeds=[];
     const N=colors.length;
-    const minDist=Math.min(W,H)*0.35;
+    const minDist=Math.min(W,H)*0.32;
     let tries=0;
     while(seeds.length<N&&tries<300){
-      const sx=W*(0.15+Math.random()*0.7),sy=H*(0.15+Math.random()*0.7);
+      const sx=W*(0.12+Math.random()*0.76),sy=H*(0.12+Math.random()*0.76);
       if(seeds.every(s=>Math.hypot(s.x-sx,s.y-sy)>minDist))seeds.push({x:sx,y:sy});
       tries++;
     }
     while(seeds.length<N)seeds.push({x:rand()*W,y:rand()*H});
 
-    // 각 색을 큰 유기적 영역으로 칠함 (많은 닥을 서로 다른 반경으로 쌓기)
     const shuffled=colors.map((c,i)=>({c,i})).sort(()=>rand()-0.5);
+
+    // 각 색 영역을 그리되, 바깥쪽에 털 같은 fringe 추가
     shuffled.forEach(({c,i})=>{
       const [r,g,b]=hex2rgb(c);
       const seed=seeds[i];
-      const regionR=diag*0.32; // 큰 영역 반경
-      // 해당 색 영역에 수백 개의 닥 뿌리기
-      const dabs=200+Math.round(R*150);
+      const regionR=diag*0.30;
+      const dabs=180+Math.round(R*100);
       for(let d=0;d<dabs;d++){
-        // seed 근처에 집중, 일부는 멀리까지 튀김
-        const t=Math.pow(rand(),0.7); // 0~1, 바깥으로 약하게 편향
+        const t=Math.pow(rand(),0.6);
         const theta=rand()*Math.PI*2;
-        const dist=t*regionR*(1+rand()*0.3);
-        const dx=Math.cos(theta)*dist;
-        const dy=Math.sin(theta)*dist;
+        // 방향성 있는 타원 왜곡 (한지 섬유 결 재현)
+        const grainDir=theta+(rand()-0.5)*0.8;
+        const dist=t*regionR*(1+rand()*0.4);
+        const dx=Math.cos(grainDir)*dist*(0.8+rand()*0.6);
+        const dy=Math.sin(grainDir)*dist;
         const px=seed.x+dx,py=seed.y+dy;
-        const dabR=diag*(0.02+rand()*0.07);
-        // 중심에 가까우면 진하게, 멀어지면 투명
+        const dabR=diag*(0.02+rand()*0.06);
         const falloff=Math.max(0,1-dist/regionR);
-        const alpha=Math.min(0.85,0.12*falloff*densityBoost+0.03);
+        const alpha=Math.min(0.8,0.1*falloff*densityBoost+0.02);
         const grd=ctx.createRadialGradient(px,py,0,px,py,dabR);
         grd.addColorStop(0,`rgba(${r},${g},${b},${alpha})`);
-        grd.addColorStop(1,`rgba(${r},${g},${b},0)`); // 반드시 0으로 끝
+        grd.addColorStop(1,`rgba(${r},${g},${b},0)`);
         ctx.fillStyle=grd;
         ctx.fillRect(px-dabR,py-dabR,dabR*2,dabR*2);
       }
-      // 중심부에 안료 집중 (진한 코어)
-      const coreR=regionR*0.45;
+      // 진한 코어 (약간 약하게 — 한지는 완전 불투명이 잘 안 됨)
+      const coreR=regionR*0.4;
       const coreGrd=ctx.createRadialGradient(seed.x,seed.y,0,seed.x,seed.y,coreR);
-      coreGrd.addColorStop(0,`rgba(${r},${g},${b},${Math.min(0.75,0.55*densityBoost)})`);
-      coreGrd.addColorStop(0.6,`rgba(${r},${g},${b},${Math.min(0.5,0.3*densityBoost)})`);
+      coreGrd.addColorStop(0,`rgba(${r},${g},${b},${Math.min(0.65,0.45*densityBoost)})`);
+      coreGrd.addColorStop(0.5,`rgba(${r},${g},${b},${Math.min(0.4,0.25*densityBoost)})`);
       coreGrd.addColorStop(1,`rgba(${r},${g},${b},0)`);
       ctx.fillStyle=coreGrd;
       ctx.fillRect(seed.x-coreR,seed.y-coreR,coreR*2,coreR*2);
+
+      // Fringe: 경계에서 뻗어나가는 털 같은 가닥 (레퍼런스의 삐죽삐죽한 외곽)
+      const fringes=Math.round(20+R*25);
+      for(let f=0;f<fringes;f++){
+        const dir=rand()*Math.PI*2;
+        const startD=regionR*(0.5+rand()*0.3);
+        const sx=seed.x+Math.cos(dir)*startD;
+        const sy=seed.y+Math.sin(dir)*startD;
+        const len=regionR*(0.1+rand()*0.25);
+        const segs=5+Math.round(rand()*5);
+        for(let s=0;s<segs;s++){
+          const p=s/segs;
+          const wobble=(rand()-0.5)*len*0.15;
+          const px=sx+Math.cos(dir)*len*p+Math.cos(dir+Math.PI/2)*wobble;
+          const py=sy+Math.sin(dir)*len*p+Math.sin(dir+Math.PI/2)*wobble;
+          const fr=diag*(0.015-p*0.008);
+          const fa=Math.min(0.5,0.14*(1-p)*densityBoost);
+          const grd=ctx.createRadialGradient(px,py,0,px,py,fr);
+          grd.addColorStop(0,`rgba(${r},${g},${b},${fa})`);
+          grd.addColorStop(1,`rgba(${r},${g},${b},0)`);
+          ctx.fillStyle=grd;ctx.fillRect(px-fr,py-fr,fr*2,fr*2);
+        }
+      }
     });
 
-    // 색 경계에 안료 응집 (multiply 블렌드로 기존 색을 어둡게)
-    // 여러 색이 겹친 곳이 자연스럽게 어두워짐
+    // 색 경계에 안료 응집 (multiply) — 좀 더 부드럽게
     ctx.globalCompositeOperation='multiply';
-    ctx.globalAlpha=Math.min(0.6,0.2+R*0.35);
+    ctx.globalAlpha=Math.min(0.5,0.18+R*0.3);
     shuffled.forEach(({c,i})=>{
       const [r,g,b]=hex2rgb(c);
       const seed=seeds[i];
-      const dark=diag*0.18;
-      const darkDabs=30+Math.round(R*30);
+      const darkDabs=25+Math.round(R*25);
       for(let d=0;d<darkDabs;d++){
         const theta=rand()*Math.PI*2;
-        const t=0.5+rand()*0.5; // 중간~바깥
-        const px=seed.x+Math.cos(theta)*dark*t*2.2;
-        const py=seed.y+Math.sin(theta)*dark*t*2.2;
-        const dabR=diag*(0.03+rand()*0.06);
+        const t=0.55+rand()*0.45;
+        const px=seed.x+Math.cos(theta)*diag*0.18*t*2.0;
+        const py=seed.y+Math.sin(theta)*diag*0.18*t*2.0;
+        const dabR=diag*(0.025+rand()*0.05);
         const grd=ctx.createRadialGradient(px,py,0,px,py,dabR);
-        grd.addColorStop(0,`rgba(${Math.max(0,r*0.3)|0},${Math.max(0,g*0.3)|0},${Math.max(0,b*0.3)|0},0.35)`);
+        grd.addColorStop(0,`rgba(${Math.max(0,r*0.35)|0},${Math.max(0,g*0.35)|0},${Math.max(0,b*0.35)|0},0.3)`);
         grd.addColorStop(1,`rgba(0,0,0,0)`);
         ctx.fillStyle=grd;
         ctx.fillRect(px-dabR,py-dabR,dabR*2,dabR*2);
@@ -400,32 +433,47 @@ function paintBackground(ctx,W,H,colors,opts){
     ctx.globalAlpha=1;
     ctx.globalCompositeOperation='source-over';
 
-    // 종이 질감 (2-옥타브 노이즈)
+    // 한지 흰 여백: 흰색 원을 screen 블렌드로 일부 영역에 뿌려 "물이 닿지 않은 종이" 효과
+    ctx.globalCompositeOperation='destination-out';
+    const whiteSpots=Math.round(15+R*10);
+    for(let i=0;i<whiteSpots;i++){
+      const wx=rand()*W,wy=rand()*H;
+      const wr=diag*(0.03+rand()*0.08);
+      const grd=ctx.createRadialGradient(wx,wy,0,wx,wy,wr);
+      grd.addColorStop(0,`rgba(0,0,0,${0.15+rand()*0.2})`);
+      grd.addColorStop(1,`rgba(0,0,0,0)`);
+      ctx.fillStyle=grd;ctx.fillRect(wx-wr,wy-wr,wr*2,wr*2);
+    }
+    ctx.globalCompositeOperation='source-over';
+
+    // 종이 섬유 질감: 3-옥타브 노이즈 (미세 + 중간 + 굵은)
     const grainCanvas=document.createElement('canvas');
     grainCanvas.width=W;grainCanvas.height=H;
     const gctx=grainCanvas.getContext('2d');
     const gImg=gctx.createImageData(W,H);
     const gd=gImg.data;
-    const coarseScale=4;
-    const coarseW=Math.ceil(W/coarseScale);
-    const coarseNoise=[];
-    for(let i=0;i<Math.ceil(H/coarseScale)*coarseW;i++)coarseNoise.push(rand());
+    const mScale=6,cScale=2;
+    const mW=Math.ceil(W/mScale),cW=Math.ceil(W/cScale);
+    const mNoise=[],cNoise=[];
+    for(let i=0;i<Math.ceil(H/mScale)*mW;i++)mNoise.push(rand());
+    for(let i=0;i<Math.ceil(H/cScale)*cW;i++)cNoise.push(rand());
     for(let y=0;y<H;y++){
       for(let x=0;x<W;x++){
         const idx=(y*W+x)*4;
         const fine=rand();
-        const coarse=coarseNoise[Math.floor(y/coarseScale)*coarseW+Math.floor(x/coarseScale)];
-        const n=(fine*0.45+coarse*0.55)*255|0;
+        const mid=cNoise[Math.floor(y/cScale)*cW+Math.floor(x/cScale)];
+        const coarse=mNoise[Math.floor(y/mScale)*mW+Math.floor(x/mScale)];
+        const n=(fine*0.35+mid*0.3+coarse*0.35)*255|0;
         gd[idx]=gd[idx+1]=gd[idx+2]=n;
-        gd[idx+3]=Math.min(150,40+R*70);
+        gd[idx+3]=Math.min(110,30+R*60);
       }
     }
     gctx.putImageData(gImg,0,0);
     ctx.globalCompositeOperation='overlay';
-    ctx.globalAlpha=Math.min(1,0.5+R*0.4);
+    ctx.globalAlpha=Math.min(0.85,0.4+R*0.35);
     ctx.drawImage(grainCanvas,0,0);
     ctx.globalCompositeOperation='multiply';
-    ctx.globalAlpha=Math.min(0.85,0.3+R*0.45);
+    ctx.globalAlpha=Math.min(0.7,0.2+R*0.35);
     ctx.drawImage(grainCanvas,0,0);
     ctx.globalAlpha=1;
     ctx.globalCompositeOperation='source-over';
@@ -554,15 +602,25 @@ function extractFromCanvas(src,k){
     const b={};
     for(let i=0;i<d.length;i+=4){
       const r=d[i],g=d[i+1],bl=d[i+2],a=d[i+3];if(a<200)continue;
+      const px=(i/4)%W,py=Math.floor((i/4)/W);
       const [h,s,l]=rgb2hsl(r,g,bl);if(l<minL||l>maxL)continue;if(s<minS)continue;
-      const key=Math.round(h/18)*18+'-'+Math.round(l*5);
-      if(!b[key])b[key]={n:0,r:0,g:0,b:0};
-      const o=b[key];o.n++;o.r+=r;o.g+=g;o.b+=bl;
+      const key=Math.round(h/15)*15+'-'+Math.round(l*6);
+      if(!b[key])b[key]={n:0,r:0,g:0,b:0,s:0,xs:[],ys:[]};
+      const o=b[key];o.n++;o.r+=r;o.g+=g;o.b+=bl;o.s+=s;
+      if(o.xs.length<50){o.xs.push(px);o.ys.push(py);}
     }
-    return Object.values(b).map(o=>({n:o.n,rgb:[o.r/o.n,o.g/o.n,o.b/o.n]})).sort((a,b)=>b.n-a.n);
+    // 중요도 = 빈도 × 평균채도 × 공간분산(주제는 여러 곳에 흩어진 경향)
+    return Object.values(b).map(o=>{
+      const avgS=o.s/o.n;
+      const mx=o.xs.reduce((a,b)=>a+b,0)/o.xs.length;
+      const my=o.ys.reduce((a,b)=>a+b,0)/o.ys.length;
+      const variance=o.xs.reduce((a,v,i)=>a+Math.hypot(v-mx,o.ys[i]-my),0)/o.xs.length;
+      const score=o.n*(0.4+avgS*0.9)*(0.5+variance/100);
+      return {score,n:o.n,rgb:[o.r/o.n,o.g/o.n,o.b/o.n]};
+    }).sort((a,b)=>b.score-a.score);
   };
-  let arr=pass(0.12,0.08,0.95);
-  if(arr.length<k)arr=pass(0.04,0.05,0.97);
+  let arr=pass(0.15,0.1,0.92);
+  if(arr.length<k)arr=pass(0.05,0.05,0.95);
   if(arr.length<k)arr=pass(0,0.02,0.99);
   const out=arr.slice(0,k).map(o=>rgb2hex(...o.rgb.map(Math.round)));
   while(out.length<k&&out.length>0)out.push(out[out.length-1]);
