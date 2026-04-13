@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f8ff; /* Light, airy background */
+            background-color: #f0f8ff;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -21,8 +21,8 @@
             border-radius: 24px;
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
             width: 350px;
-            overflow: visible; /* Allow bleeding effect outside the card */
-            transform: scale(0.95); /* Slight initial scale for entry animation */
+            overflow: visible;
+            transform: scale(0.95);
             animation: card-entry 0.6s ease-out forwards;
         }
 
@@ -36,8 +36,8 @@
             height: 250px;
             border-top-left-radius: 24px;
             border-top-right-radius: 24px;
-            overflow: hidden; /* Contains the image, not the bleeding blobs */
-            transform: translateZ(0); /* Fixes some overflow:hidden bugs */
+            overflow: hidden;
+            transform: translateZ(0);
         }
 
         .recipe-image {
@@ -45,24 +45,20 @@
             height: 100%;
             object-fit: cover;
             position: relative;
-            z-index: 2; /* Sits above the bleeding blobs */
+            z-index: 2;
             border-top-left-radius: 24px;
             border-top-right-radius: 24px;
         }
 
-        /*
-           Watercolor Overlays: This is where the new effect is implemented.
-           The ::after element is removed and replaced with actual image elements.
-        */
         .watercolor-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1; /* Sits behind the main recipe image */
-            pointer-events: none; /* Allows clicks to pass through */
-            overflow: visible; /* Essential for the bleed to go outside the container */
+            z-index: 1;
+            pointer-events: none;
+            overflow: visible;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -70,70 +66,53 @@
 
         .watercolor-blob {
             position: absolute;
-            mix-blend-mode: multiply; /* Crucial for realistic watercolor mixing */
+            mix-blend-mode: multiply;
             pointer-events: none;
-            opacity: 0.7; /* Initial opacity, modified in keyframes */
-            max-width: none; /* Allow images to be larger than the container */
-            width: 100%; /* Default width to scale to container */
+            opacity: 0.7;
+            max-width: none;
+            width: 100%;
         }
 
-        /*
-           Specific positions, scales, and animation details for each blob.
-           Data URIs for your provided images are inserted directly below.
-        */
-
-        /* Central, pulsing bloom */
         .blob5 {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             width: 100%;
             animation: pulse 18s infinite ease-in-out;
-            src: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA... (dataURI_of_c1d33c86...)"); /* Use dataUri for blob5.png */
         }
 
-        /* Top-Left bleed */
         .blob1 {
             top: -15%;
             left: -15%;
             width: 130%;
             transform-origin: top left;
             animation: bleed1 25s infinite ease-in-out;
-            src: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA... (dataURI_of_5bda1e6f...)"); /* Use dataUri for blob1.png */
         }
 
-        /* Top-Right bleed */
         .blob2 {
             top: -20%;
             right: -20%;
             width: 140%;
             transform-origin: top right;
             animation: bleed2 30s infinite ease-in-out;
-            src: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA... (dataURI_of_033600d4...)"); /* Use dataUri for blob2.png */
         }
 
-        /* Bottom-Left bleed */
         .blob3 {
             bottom: -15%;
             left: -15%;
             width: 130%;
             transform-origin: bottom left;
-            animation: bleed1 22s infinite ease-in-out; /* Reusing bleed1 keyframes */
-            src: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA... (dataURI_of_13793f1f...)"); /* Use dataUri for blob3.png */
+            animation: bleed1 22s infinite ease-in-out;
         }
 
-        /* Bottom-Right bleed */
         .blob4 {
             bottom: -25%;
             right: -25%;
             width: 150%;
             transform-origin: bottom right;
-            animation: bleed2 28s infinite ease-in-out; /* Reusing bleed2 keyframes */
-            src: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA... (dataURI_of_24e552ff...)"); /* Use dataUri for blob4.png */
+            animation: bleed2 28s infinite ease-in-out;
         }
 
-
-        /* Keyframes for the dynamic bleed effect */
         @keyframes bleed1 {
             0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.6; }
             50% { transform: scale(1.1) rotate(10deg); opacity: 0.8; }
@@ -149,7 +128,6 @@
             50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
         }
 
-
         .recipe-details {
             padding: 24px;
         }
@@ -159,7 +137,7 @@
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 1.5px;
-            color: #4da6ff; /* Match the watercolor theme */
+            color: #4da6ff;
             margin-bottom: 6px;
         }
 
@@ -224,7 +202,7 @@
 
         .ingredient-quantity {
             color: #888;
-            font-family: 'Courier New', Courier, monospace; /* For numbers */
+            font-family: 'Courier New', Courier, monospace;
         }
 
         .ingredient:last-child {
@@ -252,13 +230,12 @@
         .order-button:hover {
             background-color: #3399ff;
         }
-
     </style>
 </head>
 <body>
     <div class="recipe-card">
         <div class="recipe-image-container">
-            <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA... (dataURI_of_image_png_f007b1f9...)" alt="Blue Lemonade" class="recipe-image">
+            <img src="https://via.placeholder.com/350x250?text=Blue+Lemonade" alt="Blue Lemonade" class="recipe-image">
             
             <div class="watercolor-overlay">
                 <img src="" class="watercolor-blob blob1" alt="Watercolor Blob 1">
