@@ -19,7 +19,7 @@
   .upload-zone .icon{font-size:32px;margin-bottom:6px;display:block}
   .upload-zone .lbl{font-size:14px;font-weight:600;color:var(--fg);display:block;margin-bottom:2px}
   .upload-zone .hnt{font-size:11px;color:var(--mut)}
-  input[type=file]{display:none}
+  .file-input-hidden{position:absolute !important;width:1px !important;height:1px !important;padding:0 !important;margin:-1px !important;overflow:hidden !important;clip:rect(0 0 0 0) !important;clip-path:inset(50%) !important;white-space:nowrap !important;border:0 !important;opacity:0 !important;pointer-events:none !important;}
   .row{display:flex;gap:8px;flex-wrap:wrap}
   .seg{display:flex;background:#f5f2ea;border:1px solid var(--line);border-radius:10px;overflow:hidden;width:100%}
   .seg button{flex:1;background:transparent;color:var(--fg);border:0;padding:9px 4px;font-size:11px;cursor:pointer;white-space:nowrap}
@@ -63,12 +63,12 @@
     <p class="sub">사진의 지배색을 추출해 9:16 배경을 생성함. 사진은 색 스포이드로만 사용됨.</p>
 
     <label>이미지 업로드</label>
-    <label for="file" class="upload-zone">
+    <label for="file" class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-controls="file" aria-label="사진 선택하기">
       <span class="icon">🖼️</span>
       <span class="lbl">사진 선택하기</span>
       <span class="hnt">탭해서 사진을 고르면 팔레트가 추출됨</span>
     </label>
-    <input id="file" type="file" accept="image/*"/>
+    <input id="file" class="file-input-hidden" type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"/>
     <div class="actions" style="margin-top:10px">
       <button class="btn" id="apply" disabled>미리보기 적용</button>
       <button class="btn ghost" id="clear">초기화</button>
@@ -192,10 +192,10 @@ $('#randomAll').onclick=()=>{
   state.bokeh=Math.random()<0.7;
   const setSlider=(id,val)=>{const el=$('#'+id);el.value=val;el.dispatchEvent(new Event('input'));};
   if(pickMode==='watercolor'){
-    setSlider('sat',randInt(140,260));
-    setSlider('blur',randInt(0,20));
-    setSlider('rough',randInt(70,180));
-    setSlider('k',Math.min(numColors,randInt(3,5)));
+    setSlider('sat',randInt(70,140));
+    setSlider('blur',randInt(18,72));
+    setSlider('rough',randInt(45,95));
+    setSlider('k',Math.min(numColors,randInt(3,4)));
   } else if(pickMode==='airy'){
     setSlider('sat',randInt(70,130));
     setSlider('blur',randInt(40,100));
@@ -244,6 +244,42 @@ function hsl2rgb(h,s,l){h/=360;const hue2=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t
 function rgb2hex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,v|0)).toString(16).padStart(2,'0')).join('');}
 function hex2rgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
 function adjustSat(hex,mult){const [r,g,b]=hex2rgb(hex);const [h,s,l]=rgb2hsl(r,g,b);const ns=Math.max(0,Math.min(1,s*mult));const [r2,g2,b2]=hsl2rgb(h,ns,l);return rgb2hex(r2|0,g2|0,b2|0);}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+function mix(a,b,t){return a+(b-a)*t;}
+function softenRGB(rgb,amt,paper=[254,252,246]){return [mix(rgb[0],paper[0],amt),mix(rgb[1],paper[1],amt),mix(rgb[2],paper[2],amt)];}
+function darkenRGB(rgb,amt){return rgb.map(v=>Math.max(0,v*(1-amt)));}
+function rgba(rgb,a){return `rgba(${rgb[0]|0},${rgb[1]|0},${rgb[2]|0},${a})`;}
+function makeBlobPath(cx,cy,rx,ry,rand,points=14,jitter=0.2){
+  const pts=[];const start=rand()*Math.PI*2;
+  for(let i=0;i<points;i++){
+    const a=start+(i/points)*Math.PI*2;
+    const jx=1+(rand()-0.5)*2*jitter;
+    const jy=1+(rand()-0.5)*2*jitter;
+    pts.push({x:cx+Math.cos(a)*rx*jx,y:cy+Math.sin(a)*ry*jy});
+  }
+  const path=new Path2D();
+  const prev=pts[pts.length-1],first=pts[0];
+  path.moveTo((prev.x+first.x)/2,(prev.y+first.y)/2);
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i],n=pts[(i+1)%pts.length];
+    path.quadraticCurveTo(p.x,p.y,(p.x+n.x)/2,(p.y+n.y)/2);
+  }
+  path.closePath();
+  return path;
+}
+function addPaperReserve(ctx,cx,cy,rx,ry,rot,alpha=0.8){
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(rot);
+  ctx.scale(rx,ry);
+  const grd=ctx.createRadialGradient(0,0,0,0,0,1);
+  grd.addColorStop(0,`rgba(254,252,246,${alpha})`);
+  grd.addColorStop(0.55,`rgba(254,252,246,${alpha*0.72})`);
+  grd.addColorStop(1,'rgba(254,252,246,0)');
+  ctx.fillStyle=grd;
+  ctx.fillRect(-1.5,-1.5,3,3);
+  ctx.restore();
+}
 
 // seeded rng
 function rng(seed){let s=Math.floor(seed*1e9)||1;return()=>{s=(s*1664525+1013904223)%4294967296;return s/4294967296;};}
@@ -337,123 +373,184 @@ function paintBackground(ctx,W,H,colors,opts){
     }
   } else if(mode==='watercolor'){
     ctx.fillStyle='#fefcf6';ctx.fillRect(0,0,W,H);
+    const paper=[254,252,246];
+    const wcColors=colors.slice(0,Math.min(colors.length,4));
     const diag=Math.hypot(W,H);
-    const densityBoost=0.95+R*0.8;
+    const diffuse=clamp(0.2+blur/180,0.18,1.1);
+    const density=clamp(0.18+R*0.12,0.16,0.34);
+    const flowAngle=rand()*Math.PI*2;
+    const fx=Math.cos(flowAngle),fy=Math.sin(flowAngle);
+    const nx=-fy,ny=fx;
 
-    // 색마다 큰 영역(wash) 여러 겹을 레이어링. 작은 닥 없이 큰 그라데이션만 사용.
-    const seeds=[];
-    const N=colors.length;
-    const minDist=Math.min(W,H)*0.3;
-    let tries=0;
-    while(seeds.length<N&&tries<300){
-      const sx=W*(0.1+Math.random()*0.8),sy=H*(0.1+Math.random()*0.8);
-      if(seeds.every(s=>Math.hypot(s.x-sx,s.y-sy)>minDist))seeds.push({x:sx,y:sy});
-      tries++;
+    // 아주 옅은 바탕 워시로 전체 색감을 먼저 연결
+    const under=ctx.createLinearGradient(
+      W*(0.18-rand()*0.08),H*(0.14-rand()*0.08),
+      W*(0.84+rand()*0.08),H*(0.88+rand()*0.08)
+    );
+    wcColors.forEach((c,i)=>{
+      const soft=softenRGB(hex2rgb(c),0.45+rand()*0.12,paper);
+      under.addColorStop(i/(wcColors.length-1||1),rgba(soft,0.14));
+    });
+    ctx.fillStyle=under;
+    ctx.fillRect(0,0,W,H);
+
+    // 랜덤 산포 대신 큰 축을 따라 2~4개 색면이 이어지도록 씨드 배치
+    const crossSpan=Math.min(W,H)*(0.62+diffuse*0.08);
+    const alongSpan=Math.max(W,H)*0.28;
+    const seeds=wcColors.map((_,i)=>{
+      const t=wcColors.length===1?0.5:i/(wcColors.length-1);
+      const cross=mix(-0.5,0.5,t)*crossSpan+(rand()-0.5)*crossSpan*0.16;
+      const along=(rand()-0.5)*alongSpan;
+      return {
+        x:clamp(W/2+fx*along+nx*cross,W*0.08,W*0.92),
+        y:clamp(H/2+fy*along+ny*cross,H*0.08,H*0.92)
+      };
+    });
+
+    const order=wcColors.map((c,i)=>({c,i})).sort(()=>rand()-0.5);
+
+    order.forEach(({c,i})=>{
+      const rgb=hex2rgb(c);
+      const softRGB=softenRGB(rgb,0.1+rand()*0.12,paper);
+      const outerRGB=softenRGB(rgb,0.28+rand()*0.12,paper);
+      const edgeRGB=darkenRGB(rgb,0.38);
+      const seed=seeds[i];
+      const zoneR=diag*(0.21+rand()*0.07+diffuse*0.025);
+      const washCount=2+Math.round(rand()*2);
+
+      for(let wv=0;wv<washCount;wv++){
+        const cx=seed.x+fx*(rand()-0.5)*zoneR*0.35+nx*(rand()-0.5)*zoneR*0.55;
+        const cy=seed.y+fy*(rand()-0.5)*zoneR*0.35+ny*(rand()-0.5)*zoneR*0.55;
+        const rx=zoneR*(0.72+rand()*0.28);
+        const ry=zoneR*(0.48+rand()*0.24);
+        const path=makeBlobPath(cx,cy,rx,ry,rand,12+Math.round(rand()*4),0.14+R*0.08);
+
+        ctx.save();
+        ctx.clip(path);
+
+        const gx=cx+(rand()-0.5)*rx*0.38;
+        const gy=cy+(rand()-0.5)*ry*0.38;
+        const gR=Math.max(rx,ry)*(0.95+diffuse*0.22);
+        let grd=ctx.createRadialGradient(gx,gy,0,cx,cy,gR);
+        grd.addColorStop(0,rgba(softRGB,clamp(density,0.16,0.34)));
+        grd.addColorStop(0.42,rgba(softRGB,clamp(density*0.68,0.11,0.24)));
+        grd.addColorStop(0.8,rgba(outerRGB,0.06+diffuse*0.02));
+        grd.addColorStop(1,rgba(outerRGB,0));
+        ctx.fillStyle=grd;
+        ctx.fillRect(cx-gR*1.6,cy-gR*1.6,gR*3.2,gR*3.2);
+
+        // 안료가 한쪽에 살짝 고이도록 중심 농도 추가
+        const px=cx+(rand()-0.5)*rx*0.55;
+        const py=cy+(rand()-0.5)*ry*0.55;
+        const poolR=Math.max(rx,ry)*(0.28+rand()*0.14);
+        grd=ctx.createRadialGradient(px,py,0,px,py,poolR);
+        grd.addColorStop(0,rgba(rgb,clamp(0.18+R*0.1,0.18,0.38)));
+        grd.addColorStop(1,rgba(rgb,0));
+        ctx.globalCompositeOperation='multiply';
+        ctx.fillStyle=grd;
+        ctx.fillRect(px-poolR,py-poolR,poolR*2,poolR*2);
+
+        // 물이 번지며 생긴 밝은 중심부
+        if(rand()<0.85){
+          const lx=cx+(rand()-0.5)*rx*0.9;
+          const ly=cy+(rand()-0.5)*ry*0.9;
+          const liftR=Math.max(rx,ry)*(0.22+rand()*0.08);
+          const lift=ctx.createRadialGradient(lx,ly,0,lx,ly,liftR);
+          lift.addColorStop(0,'rgba(255,255,255,0.18)');
+          lift.addColorStop(0.65,'rgba(255,255,255,0.04)');
+          lift.addColorStop(1,'rgba(255,255,255,0)');
+          ctx.globalCompositeOperation='screen';
+          ctx.fillStyle=lift;
+          ctx.fillRect(lx-liftR,ly-liftR,liftR*2,liftR*2);
+        }
+
+        ctx.restore();
+
+        // 가장자리 안료 침착(tide edge)
+        ctx.save();
+        ctx.globalCompositeOperation='multiply';
+        ctx.strokeStyle=rgba(edgeRGB,clamp(0.05+R*0.025,0.05,0.11));
+        ctx.lineWidth=Math.max(10,Math.max(rx,ry)*(0.038+R*0.018));
+        ctx.filter=`blur(${Math.min(10,2+blur*0.06)}px)`;
+        ctx.stroke(path);
+        ctx.filter='none';
+        ctx.restore();
+
+        // edge 근처의 backrun / bloom
+        const blooms=1+(rand()>0.55?1:0);
+        for(let b=0;b<blooms;b++){
+          const a=rand()*Math.PI*2;
+          const bx=cx+Math.cos(a)*rx*(0.35+rand()*0.28);
+          const by=cy+Math.sin(a)*ry*(0.35+rand()*0.28);
+          const br=Math.max(rx,ry)*(0.12+rand()*0.1);
+
+          ctx.save();
+          ctx.globalCompositeOperation='screen';
+          let bloom=ctx.createRadialGradient(bx,by,0,bx,by,br);
+          bloom.addColorStop(0,'rgba(255,255,255,0.24)');
+          bloom.addColorStop(0.55,'rgba(255,255,255,0.07)');
+          bloom.addColorStop(1,'rgba(255,255,255,0)');
+          ctx.fillStyle=bloom;
+          ctx.fillRect(bx-br*1.4,by-br*1.4,br*2.8,br*2.8);
+          ctx.restore();
+
+          ctx.save();
+          ctx.globalCompositeOperation='multiply';
+          const ring=ctx.createRadialGradient(bx,by,br*0.45,bx,by,br);
+          ring.addColorStop(0,'rgba(0,0,0,0)');
+          ring.addColorStop(0.75,rgba(edgeRGB,0));
+          ring.addColorStop(0.92,rgba(edgeRGB,clamp(0.07+R*0.025,0.07,0.13)));
+          ring.addColorStop(1,rgba(edgeRGB,0));
+          ctx.fillStyle=ring;
+          ctx.fillRect(bx-br*1.25,by-br*1.25,br*2.5,br*2.5);
+          ctx.restore();
+        }
+      }
+    });
+
+    // 흰 종이 여백 확보
+    const reserveCount=1+Math.round(rand()*2);
+    for(let i=0;i<reserveCount;i++){
+      const rcx=W*(0.18+rand()*0.64);
+      const rcy=H*(0.14+rand()*0.72);
+      const rr=diag*(0.14+rand()*0.06);
+      addPaperReserve(ctx,rcx,rcy,rr*(0.95+rand()*0.25),rr*(0.48+rand()*0.25),rand()*Math.PI,0.7+rand()*0.18);
     }
-    while(seeds.length<N)seeds.push({x:rand()*W,y:rand()*H});
+    addPaperReserve(
+      ctx,
+      W*(0.5+(rand()-0.5)*0.12),
+      H*(0.52+(rand()-0.5)*0.22),
+      W*(0.32+diffuse*0.06),
+      H*(0.12+rand()*0.04),
+      flowAngle+(rand()-0.5)*0.5,
+      0.52
+    );
 
-    const shuffled=colors.map((c,i)=>({c,i})).sort(()=>rand()-0.5);
-
-    // 각 색을 큰 타원형 wash로 그림. 여러 각도의 타원을 겹쳐 유기적 윤곽 형성.
-    shuffled.forEach(({c,i})=>{
-      const [r,g,b]=hex2rgb(c);
-      const seed=seeds[i];
-      const baseR=diag*(0.32+rand()*0.12); // 큰 반경
-
-      // 3~5개의 큰 타원 wash를 서로 조금씩 어긋나게 쌓음
-      const layers=3+Math.round(rand()*2);
-      for(let l=0;l<layers;l++){
-        const cx=seed.x+(rand()-0.5)*baseR*0.35;
-        const cy=seed.y+(rand()-0.5)*baseR*0.35;
-        const rx=baseR*(0.75+rand()*0.5);
-        const ry=baseR*(0.75+rand()*0.5);
-        const rot=rand()*Math.PI;
-        // 타원 그라데이션: 변환 후 원형 그라데이션으로 그리기
-        ctx.save();
-        ctx.translate(cx,cy);
-        ctx.rotate(rot);
-        ctx.scale(rx/baseR,ry/baseR);
-        const alpha=Math.min(0.55,(0.22-l*0.04)*densityBoost);
-        const grd=ctx.createRadialGradient(0,0,0,0,0,baseR);
-        grd.addColorStop(0,`rgba(${r},${g},${b},${alpha})`);
-        grd.addColorStop(0.5,`rgba(${r},${g},${b},${alpha*0.6})`);
-        grd.addColorStop(0.85,`rgba(${r},${g},${b},${alpha*0.15})`);
-        grd.addColorStop(1,`rgba(${r},${g},${b},0)`);
-        ctx.fillStyle=grd;
-        ctx.fillRect(-baseR*1.5,-baseR*1.5,baseR*3,baseR*3);
-        ctx.restore();
-      }
-
-      // 진한 코어: 중심부에 한 덩어리의 짙은 색
-      const coreR=baseR*0.35;
-      const coreGrd=ctx.createRadialGradient(seed.x,seed.y,0,seed.x,seed.y,coreR);
-      coreGrd.addColorStop(0,`rgba(${r},${g},${b},${Math.min(0.7,0.5*densityBoost)})`);
-      coreGrd.addColorStop(0.6,`rgba(${r},${g},${b},${Math.min(0.45,0.3*densityBoost)})`);
-      coreGrd.addColorStop(1,`rgba(${r},${g},${b},0)`);
-      ctx.fillStyle=coreGrd;
-      ctx.fillRect(seed.x-coreR,seed.y-coreR,coreR*2,coreR*2);
-
-      // 크고 부드러운 번짐 가지: 한쪽 방향으로 길게 뻗는 3~4개의 큰 타원
-      const branches=3+Math.round(rand()*2);
-      for(let br=0;br<branches;br++){
-        const dir=rand()*Math.PI*2;
-        const dist=baseR*(0.4+rand()*0.4);
-        const bcx=seed.x+Math.cos(dir)*dist;
-        const bcy=seed.y+Math.sin(dir)*dist;
-        const bR=baseR*(0.35+rand()*0.25);
-        ctx.save();
-        ctx.translate(bcx,bcy);
-        ctx.rotate(dir);
-        ctx.scale(1.4,0.7); // 방향성 타원
-        const alpha=Math.min(0.4,0.18*densityBoost);
-        const grd=ctx.createRadialGradient(0,0,0,0,0,bR);
-        grd.addColorStop(0,`rgba(${r},${g},${b},${alpha})`);
-        grd.addColorStop(0.6,`rgba(${r},${g},${b},${alpha*0.4})`);
-        grd.addColorStop(1,`rgba(${r},${g},${b},0)`);
-        ctx.fillStyle=grd;
-        ctx.fillRect(-bR*1.5,-bR*1.5,bR*3,bR*3);
-        ctx.restore();
-      }
-    });
-
-    // 색 경계 응집: multiply로 여러 색이 겹치는 영역이 자연히 어두워짐
-    // 별도의 인위적 dab 없이 큰 반경으로만 처리
-    ctx.globalCompositeOperation='multiply';
-    ctx.globalAlpha=Math.min(0.45,0.15+R*0.3);
-    shuffled.forEach(({c,i})=>{
-      const [r,g,b]=hex2rgb(c);
-      const seed=seeds[i];
-      const dR=diag*0.22;
-      // 씨드 주변에 큰 어두운 wash 1~2개만 (dab 무리 대신)
-      const nEdge=1+Math.round(rand());
-      for(let e=0;e<nEdge;e++){
-        const theta=rand()*Math.PI*2;
-        const ex=seed.x+Math.cos(theta)*dR*1.1;
-        const ey=seed.y+Math.sin(theta)*dR*1.1;
-        const grd=ctx.createRadialGradient(ex,ey,0,ex,ey,dR);
-        grd.addColorStop(0,`rgba(${Math.max(0,r*0.35)|0},${Math.max(0,g*0.35)|0},${Math.max(0,b*0.35)|0},0.35)`);
-        grd.addColorStop(1,`rgba(0,0,0,0)`);
-        ctx.fillStyle=grd;
-        ctx.fillRect(ex-dR,ey-dR,dR*2,dR*2);
-      }
-    });
-    ctx.globalAlpha=1;
-    ctx.globalCompositeOperation='source-over';
-
-    // 종이 질감: 작고 균일한 미세 섬유만 (거친 블록 제거 → 곰팡이 느낌 방지)
+    // 종이 결: 아주 약한 미세 입자와 짧은 섬유
     const grainCanvas=document.createElement('canvas');
     grainCanvas.width=W;grainCanvas.height=H;
     const gctx=grainCanvas.getContext('2d');
     const gImg=gctx.createImageData(W,H);
     const gd=gImg.data;
     for(let i=0;i<gd.length;i+=4){
-      const n=(rand()*255)|0;
-      gd[i]=gd[i+1]=gd[i+2]=n;
-      gd[i+3]=Math.min(60,15+R*40); // 훨씬 약하게
+      const n=236+((rand()-0.5)*34|0);
+      gd[i]=clamp(n+2,0,255);
+      gd[i+1]=clamp(n,0,255);
+      gd[i+2]=clamp(n-3,0,255);
+      gd[i+3]=Math.min(34,8+R*18);
     }
     gctx.putImageData(gImg,0,0);
-    ctx.globalCompositeOperation='overlay';
-    ctx.globalAlpha=Math.min(0.5,0.2+R*0.3);
+    for(let i=0;i<80+Math.round(R*40);i++){
+      gctx.strokeStyle=`rgba(255,255,255,${0.015+rand()*0.03})`;
+      gctx.lineWidth=1;
+      const x1=rand()*W,y1=rand()*H;
+      gctx.beginPath();
+      gctx.moveTo(x1,y1);
+      gctx.lineTo(x1+(rand()-0.5)*24,y1+(rand()-0.5)*24);
+      gctx.stroke();
+    }
+    ctx.globalCompositeOperation='multiply';
+    ctx.globalAlpha=0.18+R*0.06;
     ctx.drawImage(grainCanvas,0,0);
     ctx.globalAlpha=1;
     ctx.globalCompositeOperation='source-over';
@@ -492,7 +589,7 @@ function render(){
   paintBackground(off.getContext('2d'),W,H,cols,{mode:state.mode,blur:state.blur,rough:state.rough,ang:+state.ang,bokeh:state.bokeh,seed:state.seed});
   ctx.clearRect(0,0,W,H);
   // 수채화 모드는 종이 질감을 보존하기 위해 최종 블러를 크게 억제
-  const finalBlur=state.mode==='watercolor'?Math.min(state.blur*0.25,24):state.blur;
+  const finalBlur=state.mode==='watercolor'?Math.min(state.blur*0.08,8):state.blur;
   ctx.filter=`blur(${finalBlur}px) saturate(${state.sat})`;
   const pad=Math.max(40,finalBlur*2);
   ctx.drawImage(off,-pad,-pad,W+pad*2,H+pad*2);
@@ -501,15 +598,72 @@ function render(){
 }
 
 let pendingFile=null;
+let filePickerPoll=null;
 const status=$('#fileStatus');
 const applyBtn=$('#apply');
+const fileInput=$('#file');
+const uploadZone=$('#uploadZone');
 
-$('#file').addEventListener('change',e=>{
-  const f=e.target.files[0];
-  if(!f){pendingFile=null;applyBtn.disabled=true;status.textContent='파일을 선택한 뒤 "미리보기 적용"을 눌러야 반영됨.';return;}
-  pendingFile=f;
-  applyBtn.disabled=false;
-  status.textContent=`선택됨: ${f.name} (${(f.size/1024).toFixed(0)}KB) · "미리보기 적용"을 누르면 반영됨.`;
+function setPendingFile(file){
+  pendingFile=file||null;
+  applyBtn.disabled=!pendingFile;
+  if(!pendingFile){
+    status.textContent='파일을 선택한 뒤 "미리보기 적용"을 눌러야 반영됨.';
+    return;
+  }
+  status.textContent=`선택됨: ${pendingFile.name} (${(pendingFile.size/1024).toFixed(0)}KB) · "미리보기 적용"을 누르면 반영됨.`;
+}
+
+function syncPendingFileFromInput(){
+  const file=(fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
+  if(file){
+    setPendingFile(file);
+    return true;
+  }
+  return false;
+}
+
+function stopFilePickerPoll(){
+  if(filePickerPoll){
+    clearInterval(filePickerPoll);
+    filePickerPoll=null;
+  }
+}
+
+function startFilePickerPoll(){
+  stopFilePickerPoll();
+  let tries=0;
+  filePickerPoll=setInterval(()=>{
+    tries+=1;
+    if(syncPendingFileFromInput() || tries>24){
+      stopFilePickerPoll();
+    }
+  },250);
+}
+
+function openFilePicker(ev){
+  if(ev){
+    ev.preventDefault();
+  }
+  try{ fileInput.value=''; }catch(_){}
+  startFilePickerPoll();
+  fileInput.click();
+}
+
+uploadZone.addEventListener('click',openFilePicker);
+uploadZone.addEventListener('keydown',ev=>{
+  if(ev.key==='Enter' || ev.key===' '){
+    openFilePicker(ev);
+  }
+});
+
+fileInput.addEventListener('input',()=>{ syncPendingFileFromInput(); stopFilePickerPoll(); });
+fileInput.addEventListener('change',()=>{ syncPendingFileFromInput(); stopFilePickerPoll(); });
+window.addEventListener('focus',()=>{ setTimeout(syncPendingFileFromInput,200); });
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden){
+    setTimeout(syncPendingFileFromInput,200);
+  }
 });
 
 async function decodeFile(file){
@@ -564,8 +718,9 @@ applyBtn.addEventListener('click',async ()=>{
 });
 
 $('#clear').addEventListener('click',()=>{
+  stopFilePickerPoll();
   pendingFile=null;
-  $('#file').value='';
+  fileInput.value='';
   $('#photo').removeAttribute('src');
   state.palette=['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9'];
   applyBtn.disabled=true;
