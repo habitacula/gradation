@@ -495,47 +495,70 @@ function paintBackground(ctx,W,H,colors,opts){
       const edgeRGB=darkenRGB(rgb,clamp(0.38+(presetCfg.edgeBoost-1)*0.16,0.22,0.5));
       const seed=seeds[i];
       const zoneR=diag*(0.24+rand()*0.08+diffuse*0.03)*presetCfg.zoneBoost;
-      const washCount=Math.max(2,Math.round((2+Math.round(rand()*1))*presetCfg.washBoost));
+      const washCount=Math.max(3,Math.round((3+Math.round(rand()*2))*presetCfg.washBoost));
 
       for(let wv=0;wv<washCount;wv++){
-        const cx=seed.x+fx*(rand()-0.5)*zoneR*0.35+nx*(rand()-0.5)*zoneR*0.55;
-        const cy=seed.y+fy*(rand()-0.5)*zoneR*0.35+ny*(rand()-0.5)*zoneR*0.55;
-        const rx=zoneR*(0.72+rand()*0.28);
-        const ry=zoneR*(0.48+rand()*0.24);
-        const path=makeBlobPath(cx,cy,rx,ry,rand,12+Math.round(rand()*4),0.14+R*0.08);
+        // 각 wash에 서로 다른 "성격" 부여 — 레퍼런스의 다양성 재현
+        // diffuse: 흐릿하게 퍼지는 큰 wash / sharp: 작고 진한 얼룩 / stream: 길게 흐르는 형태 / normal: 평범
+        const roll=rand();
+        const character=roll<0.25?'diffuse':roll<0.45?'sharp':roll<0.65?'stream':'normal';
+        const charCfg={
+          diffuse:{sizeMul:1.35,densityMul:0.55,edgeMul:0.35,aspectMul:1.0,jitterMul:1.2,poolMul:0.5,liftChance:0.95},
+          sharp:  {sizeMul:0.55,densityMul:1.5, edgeMul:1.6, aspectMul:0.85,jitterMul:0.9,poolMul:1.6,liftChance:0.4},
+          stream: {sizeMul:0.95,densityMul:0.9, edgeMul:0.75,aspectMul:2.2, jitterMul:1.1,poolMul:0.8,liftChance:0.7},
+          normal: {sizeMul:1.0, densityMul:1.0, edgeMul:1.0, aspectMul:1.0, jitterMul:1.0,poolMul:1.0,liftChance:0.85}
+        }[character];
+
+        const cx=seed.x+fx*(rand()-0.5)*zoneR*0.45+nx*(rand()-0.5)*zoneR*0.7;
+        const cy=seed.y+fy*(rand()-0.5)*zoneR*0.45+ny*(rand()-0.5)*zoneR*0.7;
+        const baseR=zoneR*(0.6+rand()*0.35)*charCfg.sizeMul;
+        const rx=baseR*charCfg.aspectMul*(0.85+rand()*0.3);
+        const ry=baseR/Math.sqrt(charCfg.aspectMul)*(0.85+rand()*0.3);
+        // stream character는 방향 회전까지
+        let blobRx=rx,blobRy=ry,blobCx=cx,blobCy=cy;
+        if(character==='stream'){
+          // 긴 타원을 flowAngle 또는 수직 방향으로 정렬해 흐름 강조
+          const streamAng=rand()<0.5?flowAngle:flowAngle+Math.PI/2;
+          // 중심을 약간 기울여 이동
+          blobCx=cx+Math.cos(streamAng)*baseR*0.2*(rand()-0.5);
+          blobCy=cy+Math.sin(streamAng)*baseR*0.2*(rand()-0.5);
+        }
+        const pts=Math.max(6,Math.round((7+rand()*3)*charCfg.jitterMul));
+        const jitter=(0.28+R*0.08)*charCfg.jitterMul;
+        const path=makeBlobPath(blobCx,blobCy,blobRx,blobRy,rand,pts,jitter);
 
         ctx.save();
         ctx.clip(path);
 
-        const gx=cx+(rand()-0.5)*rx*0.38;
-        const gy=cy+(rand()-0.5)*ry*0.38;
+        const gx=blobCx+(rand()-0.5)*rx*0.38;
+        const gy=blobCy+(rand()-0.5)*ry*0.38;
         const gR=Math.max(rx,ry)*(0.95+diffuse*0.22);
-        let grd=ctx.createRadialGradient(gx,gy,0,cx,cy,gR);
-        grd.addColorStop(0,rgba(softRGB,clamp(density,0.16,0.30)));
-        grd.addColorStop(0.48,rgba(softRGB,clamp(density*0.62,0.10,0.20)));
-        grd.addColorStop(0.82,rgba(outerRGB,0.05+diffuse*0.015));
+        let grd=ctx.createRadialGradient(gx,gy,0,blobCx,blobCy,gR);
+        grd.addColorStop(0,rgba(softRGB,clamp(density*charCfg.densityMul,0.08,0.42)));
+        grd.addColorStop(0.48,rgba(softRGB,clamp(density*0.62*charCfg.densityMul,0.06,0.28)));
+        grd.addColorStop(0.82,rgba(outerRGB,(0.05+diffuse*0.015)*charCfg.densityMul));
         grd.addColorStop(1,rgba(outerRGB,0));
         ctx.fillStyle=grd;
-        ctx.fillRect(cx-gR*1.6,cy-gR*1.6,gR*3.2,gR*3.2);
+        ctx.fillRect(blobCx-gR*1.6,blobCy-gR*1.6,gR*3.2,gR*3.2);
 
         // 안료가 한쪽에 살짝 고이도록 중심 농도 추가
-        const px=cx+(rand()-0.5)*rx*0.55;
-        const py=cy+(rand()-0.5)*ry*0.55;
+        const px=blobCx+(rand()-0.5)*rx*0.55;
+        const py=blobCy+(rand()-0.5)*ry*0.55;
         const poolR=Math.max(rx,ry)*(0.28+rand()*0.14);
         grd=ctx.createRadialGradient(px,py,0,px,py,poolR);
-        grd.addColorStop(0,rgba(rgb,clamp((0.14+R*0.07)*presetCfg.poolBoost,0.10,0.28)));
+        grd.addColorStop(0,rgba(rgb,clamp((0.14+R*0.07)*presetCfg.poolBoost*charCfg.poolMul,0.06,0.36)));
         grd.addColorStop(1,rgba(rgb,0));
         ctx.globalCompositeOperation='multiply';
         ctx.fillStyle=grd;
         ctx.fillRect(px-poolR,py-poolR,poolR*2,poolR*2);
 
         // 물이 번지며 생긴 밝은 중심부
-        if(rand()<0.85){
-          const lx=cx+(rand()-0.5)*rx*0.9;
-          const ly=cy+(rand()-0.5)*ry*0.9;
+        if(rand()<charCfg.liftChance){
+          const lx=blobCx+(rand()-0.5)*rx*0.9;
+          const ly=blobCy+(rand()-0.5)*ry*0.9;
           const liftR=Math.max(rx,ry)*(0.22+rand()*0.08);
           const lift=ctx.createRadialGradient(lx,ly,0,lx,ly,liftR);
-          lift.addColorStop(0,'rgba(255,255,255,0.18)');
+          lift.addColorStop(0,`rgba(255,255,255,${0.18*(character==='diffuse'?1.3:1)})`);
           lift.addColorStop(0.65,'rgba(255,255,255,0.04)');
           lift.addColorStop(1,'rgba(255,255,255,0)');
           ctx.globalCompositeOperation='screen';
@@ -543,46 +566,41 @@ function paintBackground(ctx,W,H,colors,opts){
           ctx.fillRect(lx-liftR,ly-liftR,liftR*2,liftR*2);
         }
 
-        ctx.restore();
-
-        // 가장자리 안료 침착(tide edge)
+        // 가장자리 안료 침착(tide edge): character에 따라 강약
         ctx.save();
+        ctx.clip(path);
         ctx.globalCompositeOperation='multiply';
-        ctx.strokeStyle=rgba(edgeRGB,clamp((0.035+R*0.015)*presetCfg.edgeBoost,0.03,0.08));
-        ctx.lineWidth=Math.max(6,Math.max(rx,ry)*(0.022+R*0.01)*(0.92+presetCfg.edgeBoost*0.04));
-        ctx.filter=`blur(${Math.min(10,2+blur*0.06)}px)`;
-        ctx.stroke(path);
-        ctx.filter='none';
+        const mR=Math.max(rx,ry);
+        const edgeGrd=ctx.createRadialGradient(blobCx,blobCy,mR*0.7,blobCx,blobCy,mR*1.1);
+        edgeGrd.addColorStop(0,rgba(edgeRGB,0));
+        edgeGrd.addColorStop(0.55,rgba(edgeRGB,0));
+        edgeGrd.addColorStop(0.88,rgba(edgeRGB,clamp((0.10+R*0.05)*presetCfg.edgeBoost*charCfg.edgeMul,0.03,0.26)));
+        edgeGrd.addColorStop(1,rgba(edgeRGB,0));
+        ctx.fillStyle=edgeGrd;
+        ctx.fillRect(blobCx-mR*1.6,blobCy-mR*1.6,mR*3.2,mR*3.2);
         ctx.restore();
 
-        // edge 근처의 backrun / bloom
-        const blooms=rand()>0.72?2:1;
-        for(let b=0;b<blooms;b++){
-          const a=rand()*Math.PI*2;
-          const bx=cx+Math.cos(a)*rx*(0.35+rand()*0.28);
-          const by=cy+Math.sin(a)*ry*(0.35+rand()*0.28);
-          const br=Math.max(rx,ry)*(0.12+rand()*0.1);
+        ctx.restore();
 
-          ctx.save();
-          ctx.globalCompositeOperation='screen';
-          let bloom=ctx.createRadialGradient(bx,by,0,bx,by,br);
-          bloom.addColorStop(0,'rgba(255,255,255,0.16)');
-          bloom.addColorStop(0.55,'rgba(255,255,255,0.04)');
-          bloom.addColorStop(1,'rgba(255,255,255,0)');
-          ctx.fillStyle=bloom;
-          ctx.fillRect(bx-br*1.4,by-br*1.4,br*2.8,br*2.8);
-          ctx.restore();
+        // 얼룩 내부에 물자국(backrun): diffuse/normal에만, sharp에선 생략
+        if(character!=='sharp'){
+          const blooms=rand()>0.72?2:1;
+          for(let b=0;b<blooms;b++){
+            const a=rand()*Math.PI*2;
+            const bx=blobCx+Math.cos(a)*rx*(0.3+rand()*0.3);
+            const by=blobCy+Math.sin(a)*ry*(0.3+rand()*0.3);
+            const br=Math.max(rx,ry)*(0.14+rand()*0.1);
 
-          ctx.save();
-          ctx.globalCompositeOperation='multiply';
-          const ring=ctx.createRadialGradient(bx,by,br*0.45,bx,by,br);
-          ring.addColorStop(0,'rgba(0,0,0,0)');
-          ring.addColorStop(0.75,rgba(edgeRGB,0));
-          ring.addColorStop(0.92,rgba(edgeRGB,clamp((0.04+R*0.015)*presetCfg.bloomBoost,0.03,0.08)));
-          ring.addColorStop(1,rgba(edgeRGB,0));
-          ctx.fillStyle=ring;
-          ctx.fillRect(bx-br*1.25,by-br*1.25,br*2.5,br*2.5);
-          ctx.restore();
+            ctx.save();
+            ctx.globalCompositeOperation='screen';
+            const bloom=ctx.createRadialGradient(bx,by,0,bx,by,br);
+            bloom.addColorStop(0,'rgba(255,255,255,0.22)');
+            bloom.addColorStop(0.5,'rgba(255,255,255,0.08)');
+            bloom.addColorStop(1,'rgba(255,255,255,0)');
+            ctx.fillStyle=bloom;
+            ctx.fillRect(bx-br*1.4,by-br*1.4,br*2.8,br*2.8);
+            ctx.restore();
+          }
         }
       }
     });
