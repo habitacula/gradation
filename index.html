@@ -106,6 +106,17 @@
       <button data-v="off">꺼짐</button>
     </div>
 
+    <div id="watercolorPresetWrap">
+      <label>수채화 프리셋</label>
+      <div class="seg" id="waterPresetSeg">
+        <button data-v="pastel" class="on">옅은 파스텔형</button>
+        <button data-v="deep">진한 번짐형</button>
+        <button data-v="text">여백 많은 텍스트용</button>
+      </div>
+      <div class="hint" id="waterPresetHint">연하고 밝은 수채 워시 중심. 파스텔 톤과 부드러운 연결감에 맞춤.</div>
+    </div>
+
+
     <label>추출된 팔레트</label>
     <div class="palette" id="pal"></div>
 
@@ -128,15 +139,71 @@
 
 <script>
 const $=s=>document.querySelector(s);
-const state={mode:'linear',sat:1,blur:60,rough:0.5,k:4,ang:135,bokeh:true,seed:Math.random(),palette:['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']};
+const state={mode:'linear',sat:1,blur:60,rough:0.5,k:4,ang:135,bokeh:true,seed:Math.random(),watercolorPreset:'pastel',palette:['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']};
 
 function setSeg(id,key){
   document.querySelectorAll(`#${id} button`).forEach(b=>{
     b.classList.toggle('on',b.dataset.v===String(state[key]));
-    b.onclick=()=>{state[key]=b.dataset.v==='on'?true:b.dataset.v==='off'?false:b.dataset.v;setSeg(id,key);render();};
+    b.onclick=()=>{
+      state[key]=b.dataset.v==='on'?true:b.dataset.v==='off'?false:b.dataset.v;
+      setSeg(id,key);
+      if(key==='mode'){
+        updateWatercolorUI();
+        if(state.mode==='watercolor') applyWatercolorPreset(state.watercolorPreset);
+      }
+      render();
+    };
   });
 }
 setSeg('modeSeg','mode');
+
+const watercolorPresetMeta={
+  pastel:{hint:'연하고 밝은 수채 워시 중심. 파스텔 톤과 부드러운 연결감에 맞춤.',slider:{sat:88,blur:42,rough:56,k:4,bokeh:false}},
+  deep:{hint:'안료 농도와 번짐이 더 강하고, 경계 침착과 색 겹침이 더 도드라지는 타입.',slider:{sat:128,blur:26,rough:82,k:4,bokeh:false}},
+  text:{hint:'중앙 또는 상단에 텍스트를 얹기 좋도록 흰 여백을 넓게 남기는 타입.',slider:{sat:92,blur:34,rough:48,k:3,bokeh:false}}
+};
+function updateWatercolorUI(){
+  const wrap=$('#watercolorPresetWrap');
+  if(wrap)wrap.style.display=state.mode==='watercolor'?'block':'none';
+  const hint=$('#waterPresetHint');
+  if(hint)hint.textContent=watercolorPresetMeta[state.watercolorPreset]?.hint||'';
+}
+function setWaterPresetSeg(){
+  document.querySelectorAll('#waterPresetSeg button').forEach(b=>{
+    b.classList.toggle('on',b.dataset.v===state.watercolorPreset);
+    b.onclick=()=>{
+      state.watercolorPreset=b.dataset.v;
+      setWaterPresetSeg();
+      updateWatercolorUI();
+      render();
+    };
+  });
+}
+function applyWatercolorPreset(name,forced={}){
+  const meta=watercolorPresetMeta[name]||watercolorPresetMeta.pastel;
+  state.watercolorPreset=name;
+  const setSlider=(id,val)=>{
+    if(val==null)return;
+    const el=$('#'+id);
+    if(!el)return;
+    el.value=val;
+    el.dispatchEvent(new Event('input'));
+  };
+  const slider={...meta.slider,...forced};
+  setSlider('sat',slider.sat);
+  setSlider('blur',slider.blur);
+  setSlider('rough',slider.rough);
+  setSlider('k',slider.k);
+  if(typeof slider.bokeh==='boolean'){
+    state.bokeh=slider.bokeh;
+    document.querySelectorAll('#bokehSeg button').forEach(b=>b.classList.toggle('on',(state.bokeh?'on':'off')===b.dataset.v));
+  }
+  setWaterPresetSeg();
+  updateWatercolorUI();
+}
+
+setWaterPresetSeg();
+updateWatercolorUI();
 document.querySelectorAll('#bokehSeg button').forEach(b=>{
   b.classList.toggle('on',(state.bokeh?'on':'off')===b.dataset.v);
   b.onclick=()=>{state.bokeh=b.dataset.v==='on';document.querySelectorAll('#bokehSeg button').forEach(x=>x.classList.toggle('on',x===b));render();};
@@ -192,10 +259,15 @@ $('#randomAll').onclick=()=>{
   state.bokeh=Math.random()<0.7;
   const setSlider=(id,val)=>{const el=$('#'+id);el.value=val;el.dispatchEvent(new Event('input'));};
   if(pickMode==='watercolor'){
-    setSlider('sat',randInt(70,140));
-    setSlider('blur',randInt(18,72));
-    setSlider('rough',randInt(45,95));
-    setSlider('k',Math.min(numColors,randInt(3,4)));
+    const presets=['pastel','deep','text'];
+    const preset=presets[Math.floor(Math.random()*presets.length)];
+    applyWatercolorPreset(preset,{
+      sat:preset==='deep'?randInt(112,155):preset==='text'?randInt(80,104):randInt(78,100),
+      blur:preset==='deep'?randInt(16,34):preset==='text'?randInt(28,46):randInt(34,58),
+      rough:preset==='deep'?randInt(74,96):preset==='text'?randInt(40,58):randInt(48,66),
+      k:Math.min(numColors,preset==='text'?randInt(2,3):randInt(3,4)),
+      bokeh:false
+    });
   } else if(pickMode==='airy'){
     setSlider('sat',randInt(70,130));
     setSlider('blur',randInt(40,100));
@@ -210,6 +282,8 @@ $('#randomAll').onclick=()=>{
   setSlider('ang',randInt(0,360));
   document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===state.mode));
   document.querySelectorAll('#bokehSeg button').forEach(b=>b.classList.toggle('on',(state.bokeh?'on':'off')===b.dataset.v));
+  updateWatercolorUI();
+  setWaterPresetSeg();
   render();
 };
 
@@ -285,7 +359,7 @@ function addPaperReserve(ctx,cx,cy,rx,ry,rot,alpha=0.8){
 function rng(seed){let s=Math.floor(seed*1e9)||1;return()=>{s=(s*1664525+1013904223)%4294967296;return s/4294967296;};}
 
 function paintBackground(ctx,W,H,colors,opts){
-  const {mode,blur,rough,ang,bokeh,seed}=opts;
+  const {mode,blur,rough,ang,bokeh,seed,watercolorPreset='pastel'}=opts;
   const R=typeof rough==='number'?rough:0.5; // 0~2
   const rand=rng(seed);
   ctx.clearRect(0,0,W,H);
@@ -376,8 +450,13 @@ function paintBackground(ctx,W,H,colors,opts){
     const paper=[254,252,246];
     const wcColors=colors.slice(0,Math.min(colors.length,4));
     const diag=Math.hypot(W,H);
-    const diffuse=clamp(0.2+blur/180,0.18,1.1);
-    const density=clamp(0.18+R*0.12,0.16,0.34);
+    const presetCfg={
+      pastel:{soften:0.12,under:0.15,diffuseBoost:1.18,densityBoost:0.82,edgeBoost:0.82,reserveBoost:1.05,reserveAlpha:1.05,bloomBoost:1.08,poolBoost:0.78,grainBoost:0.9,washBoost:1.0,zoneBoost:1.02},
+      deep:{soften:-0.04,under:0.11,diffuseBoost:0.92,densityBoost:1.38,edgeBoost:1.35,reserveBoost:0.72,reserveAlpha:0.8,bloomBoost:0.88,poolBoost:1.32,grainBoost:1.12,washBoost:1.12,zoneBoost:0.97},
+      text:{soften:0.18,under:0.10,diffuseBoost:1.02,densityBoost:0.74,edgeBoost:0.78,reserveBoost:1.65,reserveAlpha:1.2,bloomBoost:0.82,poolBoost:0.68,grainBoost:0.82,washBoost:0.9,zoneBoost:0.92}
+    }[watercolorPreset]||{soften:0,under:0.14,diffuseBoost:1,densityBoost:1,edgeBoost:1,reserveBoost:1,reserveAlpha:1,bloomBoost:1,poolBoost:1,grainBoost:1,washBoost:1,zoneBoost:1};
+    const diffuse=clamp((0.2+blur/180)*presetCfg.diffuseBoost,0.18,1.18);
+    const density=clamp((0.18+R*0.12)*presetCfg.densityBoost,0.12,0.44);
     const flowAngle=rand()*Math.PI*2;
     const fx=Math.cos(flowAngle),fy=Math.sin(flowAngle);
     const nx=-fy,ny=fx;
@@ -388,15 +467,15 @@ function paintBackground(ctx,W,H,colors,opts){
       W*(0.84+rand()*0.08),H*(0.88+rand()*0.08)
     );
     wcColors.forEach((c,i)=>{
-      const soft=softenRGB(hex2rgb(c),0.45+rand()*0.12,paper);
-      under.addColorStop(i/(wcColors.length-1||1),rgba(soft,0.14));
+      const soft=softenRGB(hex2rgb(c),clamp(0.45+rand()*0.12+presetCfg.soften,0.22,0.7),paper);
+      under.addColorStop(i/(wcColors.length-1||1),rgba(soft,clamp(presetCfg.under,0.08,0.2)));
     });
     ctx.fillStyle=under;
     ctx.fillRect(0,0,W,H);
 
     // 랜덤 산포 대신 큰 축을 따라 2~4개 색면이 이어지도록 씨드 배치
-    const crossSpan=Math.min(W,H)*(0.62+diffuse*0.08);
-    const alongSpan=Math.max(W,H)*0.28;
+    const crossSpan=Math.min(W,H)*(0.62+diffuse*0.08)*(watercolorPreset==='text'?0.88:1);
+    const alongSpan=Math.max(W,H)*0.28*(watercolorPreset==='text'?0.8:1);
     const seeds=wcColors.map((_,i)=>{
       const t=wcColors.length===1?0.5:i/(wcColors.length-1);
       const cross=mix(-0.5,0.5,t)*crossSpan+(rand()-0.5)*crossSpan*0.16;
@@ -411,12 +490,12 @@ function paintBackground(ctx,W,H,colors,opts){
 
     order.forEach(({c,i})=>{
       const rgb=hex2rgb(c);
-      const softRGB=softenRGB(rgb,0.1+rand()*0.12,paper);
-      const outerRGB=softenRGB(rgb,0.28+rand()*0.12,paper);
-      const edgeRGB=darkenRGB(rgb,0.38);
+      const softRGB=softenRGB(rgb,clamp(0.1+rand()*0.12+presetCfg.soften,0.02,0.34),paper);
+      const outerRGB=softenRGB(rgb,clamp(0.28+rand()*0.12+presetCfg.soften*0.9,0.12,0.48),paper);
+      const edgeRGB=darkenRGB(rgb,clamp(0.38+(presetCfg.edgeBoost-1)*0.16,0.22,0.5));
       const seed=seeds[i];
-      const zoneR=diag*(0.21+rand()*0.07+diffuse*0.025);
-      const washCount=2+Math.round(rand()*2);
+      const zoneR=diag*(0.21+rand()*0.07+diffuse*0.025)*presetCfg.zoneBoost;
+      const washCount=Math.max(2,Math.round((2+Math.round(rand()*2))*presetCfg.washBoost));
 
       for(let wv=0;wv<washCount;wv++){
         const cx=seed.x+fx*(rand()-0.5)*zoneR*0.35+nx*(rand()-0.5)*zoneR*0.55;
@@ -444,7 +523,7 @@ function paintBackground(ctx,W,H,colors,opts){
         const py=cy+(rand()-0.5)*ry*0.55;
         const poolR=Math.max(rx,ry)*(0.28+rand()*0.14);
         grd=ctx.createRadialGradient(px,py,0,px,py,poolR);
-        grd.addColorStop(0,rgba(rgb,clamp(0.18+R*0.1,0.18,0.38)));
+        grd.addColorStop(0,rgba(rgb,clamp((0.18+R*0.1)*presetCfg.poolBoost,0.12,0.46)));
         grd.addColorStop(1,rgba(rgb,0));
         ctx.globalCompositeOperation='multiply';
         ctx.fillStyle=grd;
@@ -469,8 +548,8 @@ function paintBackground(ctx,W,H,colors,opts){
         // 가장자리 안료 침착(tide edge)
         ctx.save();
         ctx.globalCompositeOperation='multiply';
-        ctx.strokeStyle=rgba(edgeRGB,clamp(0.05+R*0.025,0.05,0.11));
-        ctx.lineWidth=Math.max(10,Math.max(rx,ry)*(0.038+R*0.018));
+        ctx.strokeStyle=rgba(edgeRGB,clamp((0.05+R*0.025)*presetCfg.edgeBoost,0.04,0.16));
+        ctx.lineWidth=Math.max(10,Math.max(rx,ry)*(0.038+R*0.018)*(0.94+presetCfg.edgeBoost*0.08));
         ctx.filter=`blur(${Math.min(10,2+blur*0.06)}px)`;
         ctx.stroke(path);
         ctx.filter='none';
@@ -499,7 +578,7 @@ function paintBackground(ctx,W,H,colors,opts){
           const ring=ctx.createRadialGradient(bx,by,br*0.45,bx,by,br);
           ring.addColorStop(0,'rgba(0,0,0,0)');
           ring.addColorStop(0.75,rgba(edgeRGB,0));
-          ring.addColorStop(0.92,rgba(edgeRGB,clamp(0.07+R*0.025,0.07,0.13)));
+          ring.addColorStop(0.92,rgba(edgeRGB,clamp((0.07+R*0.025)*presetCfg.bloomBoost,0.05,0.16)));
           ring.addColorStop(1,rgba(edgeRGB,0));
           ctx.fillStyle=ring;
           ctx.fillRect(bx-br*1.25,by-br*1.25,br*2.5,br*2.5);
@@ -509,21 +588,21 @@ function paintBackground(ctx,W,H,colors,opts){
     });
 
     // 흰 종이 여백 확보
-    const reserveCount=1+Math.round(rand()*2);
+    const reserveCount=Math.max(1,Math.round((1+Math.round(rand()*2))*presetCfg.reserveBoost));
     for(let i=0;i<reserveCount;i++){
       const rcx=W*(0.18+rand()*0.64);
       const rcy=H*(0.14+rand()*0.72);
-      const rr=diag*(0.14+rand()*0.06);
-      addPaperReserve(ctx,rcx,rcy,rr*(0.95+rand()*0.25),rr*(0.48+rand()*0.25),rand()*Math.PI,0.7+rand()*0.18);
+      const rr=diag*(0.14+rand()*0.06)*(watercolorPreset==='text'?1.08:1);
+      addPaperReserve(ctx,rcx,rcy,rr*(0.95+rand()*0.25),rr*(0.48+rand()*0.25),rand()*Math.PI,(0.7+rand()*0.18)*presetCfg.reserveAlpha);
     }
     addPaperReserve(
       ctx,
       W*(0.5+(rand()-0.5)*0.12),
       H*(0.52+(rand()-0.5)*0.22),
-      W*(0.32+diffuse*0.06),
-      H*(0.12+rand()*0.04),
+      W*(0.32+diffuse*0.06)*(watercolorPreset==='text'?1.18:1),
+      H*(0.12+rand()*0.04)*(watercolorPreset==='text'?1.22:1),
       flowAngle+(rand()-0.5)*0.5,
-      0.52
+      0.52*presetCfg.reserveAlpha
     );
 
     // 종이 결: 아주 약한 미세 입자와 짧은 섬유
@@ -537,10 +616,10 @@ function paintBackground(ctx,W,H,colors,opts){
       gd[i]=clamp(n+2,0,255);
       gd[i+1]=clamp(n,0,255);
       gd[i+2]=clamp(n-3,0,255);
-      gd[i+3]=Math.min(34,8+R*18);
+      gd[i+3]=Math.min(34,(8+R*18)*presetCfg.grainBoost);
     }
     gctx.putImageData(gImg,0,0);
-    for(let i=0;i<80+Math.round(R*40);i++){
+    for(let i=0;i<Math.round((80+R*40)*presetCfg.grainBoost);i++){
       gctx.strokeStyle=`rgba(255,255,255,${0.015+rand()*0.03})`;
       gctx.lineWidth=1;
       const x1=rand()*W,y1=rand()*H;
@@ -586,7 +665,7 @@ function render(){
   const k=Math.min(+state.k,state.palette.length||+state.k);
   const cols=(state.palette.slice(0,k).length?state.palette.slice(0,k):['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']).map(c=>adjustSat(c,state.sat));
   const off=document.createElement('canvas');off.width=W;off.height=H;
-  paintBackground(off.getContext('2d'),W,H,cols,{mode:state.mode,blur:state.blur,rough:state.rough,ang:+state.ang,bokeh:state.bokeh,seed:state.seed});
+  paintBackground(off.getContext('2d'),W,H,cols,{mode:state.mode,blur:state.blur,rough:state.rough,ang:+state.ang,bokeh:state.bokeh,seed:state.seed,watercolorPreset:state.watercolorPreset});
   ctx.clearRect(0,0,W,H);
   // 수채화 모드는 종이 질감을 보존하기 위해 최종 블러를 크게 억제
   const finalBlur=state.mode==='watercolor'?Math.min(state.blur*0.08,8):state.blur;
@@ -771,6 +850,7 @@ $('#dl').onclick=()=>{
 $('#closeModal').onclick=()=>$('#saveModal').classList.remove('on');
 $('#saveModal').addEventListener('click',e=>{if(e.target.id==='saveModal')$('#saveModal').classList.remove('on');});
 
+updateWatercolorUI();
 render();
 </script>
 </body>
