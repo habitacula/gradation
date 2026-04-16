@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>수채화 프롬프트 빌더</title>
+  <title>그라데이션 배경 빌더</title>
   <style>
     :root{
       --bg:#f5f4f1; --panel:#ffffff; --text:#111827; --muted:#6b7280; --line:#e5e7eb; --accent:#0f172a;
@@ -25,15 +25,14 @@
     .title{font-size:18px; font-weight:800; margin:0 0 12px}
     .field{margin-bottom:12px}
     label{display:block; font-size:14px; font-weight:700; margin-bottom:6px}
-    input[type="file"], select, textarea, button{
+    input[type="file"], select, button{
       font:inherit;
     }
-    input[type="file"], select, textarea{
+    input[type="file"], select{
       width:100%; border:1px solid var(--line); border-radius:14px; background:#fff; color:var(--text);
       padding:12px 14px;
     }
     select{appearance:auto; min-height:48px}
-    textarea{min-height:280px; resize:vertical}
     .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
     button{
       width:100%; border:0; border-radius:16px; padding:15px 16px; background:var(--accent); color:#fff;
@@ -41,6 +40,7 @@
     }
     button:disabled{opacity:.65; cursor:default}
     .ghost{background:#fff; color:var(--text); border:1px solid var(--line)}
+    .btn-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px}
     .status{
       padding:11px 13px; border-radius:14px; border:1px solid var(--line); font-size:14px; margin-top:10px;
       background:#fff;
@@ -49,54 +49,96 @@
     .warn{color:var(--warn); background:var(--warnbg); border-color:#fcd34d}
     .err{color:var(--err); background:var(--errbg); border-color:#fca5a5}
     .preview{
-      border:1px dashed var(--line); border-radius:16px; min-height:220px; background:#fafafa;
-      display:flex; align-items:center; justify-content:center; overflow:hidden;
+      border:1px dashed var(--line); border-radius:16px; min-height:320px; background:#fafafa;
+      display:flex; align-items:center; justify-content:center; overflow:hidden; padding:18px;
     }
-    .preview img{
-      width:100%; height:auto; display:block;
+    .frame{
+      position:relative; width:min(100%,360px); aspect-ratio:9/16; overflow:hidden;
+      border-radius:22px; border:1px solid var(--line); background:#eee;
+      box-shadow:0 10px 40px rgba(15,23,42,.12);
     }
-    .muted{color:var(--muted); font-size:13px}
-    .swatches{
-      display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+    .frame canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+    .frame img{
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      max-width:78%; max-height:72%; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.25);
+      display:none;
     }
-    .swatch{
-      border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff;
-    }
+    .preview-note{margin-top:10px; color:var(--muted); font-size:13px}
+    .swatches{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+    .swatch{border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff}
     .color{height:64px}
     .meta{padding:10px; font-size:12px}
     .meta strong{display:block; font-size:13px; margin-bottom:3px}
-    .head{
-      display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;
-    }
-    .copybtn{
-      width:auto; margin:0; padding:9px 12px; border-radius:12px; font-size:13px; background:#fff; color:var(--text); border:1px solid var(--line);
-    }
-    .hint-box{
-      border:1px solid var(--line); border-radius:14px; padding:12px; background:#fafafa; font-size:13px; color:#374151; margin-top:10px;
-    }
+    .range-head{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px}
+    .range-head label{margin:0}
+    .val{color:#374151; font-variant-numeric:tabular-nums; font-size:13px}
+    input[type="range"]{width:100%; accent-color:var(--accent)}
     .pill{
       display:inline-block; font-size:12px; background:#f3f4f6; border:1px solid var(--line);
       padding:4px 8px; border-radius:999px; margin-right:6px; margin-bottom:6px;
     }
+    .hint-box{
+      border:1px solid var(--line); border-radius:14px; padding:12px; background:#fafafa;
+      font-size:13px; color:#374151; margin-top:10px;
+    }
+    .modal{position:fixed; inset:0; background:rgba(15,23,42,.72); display:none; align-items:center; justify-content:center; z-index:30; padding:20px}
+    .modal.on{display:flex}
+    .modal-inner{background:#fff; border-radius:18px; padding:18px; width:min(100%,420px); box-shadow:0 16px 50px rgba(0,0,0,.18)}
+    .modal-inner h2{font-size:18px; margin:0 0 8px}
+    .modal-inner p{margin:0 0 12px; font-size:13px; color:var(--muted)}
+    .modal-inner img{width:100%; display:block; border-radius:14px; border:1px solid var(--line); background:#fafafa; margin-bottom:10px}
+    .hidden{display:none !important}
     @media (max-width:640px){
       .row{grid-template-columns:1fr 1fr}
       .swatches{grid-template-columns:repeat(2,1fr)}
       h1{font-size:28px}
-      textarea{min-height:320px}
+      .preview{min-height:280px; padding:14px}
+      .frame{width:min(100%,320px)}
     }
   </style>
 </head>
 <body>
+  <div class="modal" id="saveModal">
+    <div class="modal-inner">
+      <h2>이미지 저장</h2>
+      <p>iPhone에서는 아래 이미지를 길게 눌러 저장하면 된다. 데스크톱에서는 우클릭 후 이미지 저장을 쓰면 된다.</p>
+      <img id="saveImg" alt="gradient background preview" />
+      <button id="closeModal" type="button">닫기</button>
+    </div>
+  </div>
+
   <div class="wrap">
-    <h1>수채화 프롬프트 빌더</h1>
-    <p class="lead">사진의 핵심 색상을 뽑아 인스타 배경용 수채화 프롬프트로 바꾸고, 번짐 효과도 매번 다르게 변주한다.</p>
+    <h1>그라데이션 배경 빌더</h1>
+    <p class="lead">사진의 핵심 색상을 추출해 인스타 배경용 그라데이션을 만들고, 번짐 배치도 계속 바꿔볼 수 있게 정리한 버전이다.</p>
 
     <div class="panel">
       <div class="title">입력</div>
 
       <div class="field">
         <label for="imageInput">이미지 업로드</label>
-        <input id="imageInput" type="file" accept="image/*">
+        <input id="imageInput" type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp" />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="aspectMode">화면 비율</label>
+          <select id="aspectMode">
+            <option value="story" selected>9:16 스토리형</option>
+            <option value="feed">4:5 피드형</option>
+            <option value="square">1:1 정사각형</option>
+            <option value="wide">16:9 와이드형</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="modeMode">배경 방식</label>
+          <select id="modeMode">
+            <option value="linear" selected>선형</option>
+            <option value="radial">방사형</option>
+            <option value="mesh">메시</option>
+            <option value="airy">에어리</option>
+            <option value="flow">강한 번짐</option>
+          </select>
+        </div>
       </div>
 
       <div class="row">
@@ -104,603 +146,714 @@
           <label for="paletteCount">추출 색상 수</label>
           <select id="paletteCount">
             <option value="2">2색</option>
-            <option value="3" selected>3색</option>
-            <option value="4">4색</option>
+            <option value="3">3색</option>
+            <option value="4" selected>4색</option>
             <option value="5">5색</option>
+            <option value="6">6색</option>
           </select>
         </div>
         <div class="field">
-          <label for="layoutMode">배경 구도</label>
-          <select id="layoutMode">
-            <option value="중앙 여백형" selected>중앙 여백형</option>
-            <option value="가장자리 확산형">가장자리 확산형</option>
-            <option value="대각선 흐름형">대각선 흐름형</option>
-            <option value="전면 워시형">전면 워시형</option>
+          <label for="bokehMode">빛망울</label>
+          <select id="bokehMode">
+            <option value="on" selected>켜짐</option>
+            <option value="off">꺼짐</option>
           </select>
         </div>
       </div>
 
-      <div class="row">
-        <div class="field">
-          <label for="intensityMode">분위기 강도</label>
-          <select id="intensityMode">
-            <option value="연하고 공기감 있게" selected>연하고 공기감 있게</option>
-            <option value="균형감 있게">균형감 있게</option>
-            <option value="대비감 있게">대비감 있게</option>
-          </select>
+      <div class="field">
+        <div class="range-head">
+          <label for="satRange">채도</label>
+          <span id="satVal" class="val">100%</span>
         </div>
-        <div class="field">
-          <label for="aspectMode">화면 비율</label>
-          <select id="aspectMode">
-            <option value="9:16 스토리형">9:16 스토리형</option>
-            <option value="4:5 피드형" selected>4:5 피드형</option>
-            <option value="1:1 정사각형">1:1 정사각형</option>
-            <option value="16:9 와이드형">16:9 와이드형</option>
-          </select>
+        <input id="satRange" type="range" min="40" max="300" value="100" />
+      </div>
+
+      <div class="field">
+        <div class="range-head">
+          <label for="blurRange">번짐(블러)</label>
+          <span id="blurVal" class="val">60px</span>
+        </div>
+        <input id="blurRange" type="range" min="0" max="160" value="60" />
+      </div>
+
+      <div class="field">
+        <div class="range-head">
+          <label for="roughRange">거침</label>
+          <span id="roughVal" class="val">45%</span>
+        </div>
+        <input id="roughRange" type="range" min="0" max="120" value="45" />
+      </div>
+
+      <div class="field">
+        <div class="range-head">
+          <label for="angleRange">각도</label>
+          <span id="angleVal" class="val">135°</span>
+        </div>
+        <input id="angleRange" type="range" min="0" max="360" value="135" />
+      </div>
+
+      <div id="flowControls" class="hidden">
+        <div class="row">
+          <div class="field">
+            <label for="flowStyleMode">흐름 스타일</label>
+            <select id="flowStyleMode">
+              <option value="straight" selected>직선</option>
+              <option value="curve">곡선</option>
+              <option value="swirl">소용돌이</option>
+              <option value="chaos">난류</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="range-head">
+              <label for="curveRange">흐름 곡률</label>
+              <span id="curveVal" class="val">40%</span>
+            </div>
+            <input id="curveRange" type="range" min="0" max="100" value="40" />
+          </div>
         </div>
       </div>
 
-      <div class="row">
-        <div class="field">
-          <label for="bleedMode">번짐 스타일</label>
-          <select id="bleedMode">
-            <option value="자동 랜덤" selected>자동 랜덤</option>
-            <option value="안개형 워시">안개형 워시</option>
-            <option value="블룸 강조">블룸 강조</option>
-            <option value="역번짐 강조">역번짐 강조</option>
-            <option value="가장자리 풀링">가장자리 풀링</option>
-            <option value="다층 워시">다층 워시</option>
-            <option value="입자 확산">입자 확산</option>
-            <option value="비대칭 대형 번짐">비대칭 대형 번짐</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="variationMode">변주 강도</label>
-          <select id="variationMode">
-            <option value="안정적">안정적</option>
-            <option value="중간" selected>중간</option>
-            <option value="강함">강함</option>
-          </select>
-        </div>
+      <button id="applyBtn" type="button">색상 추출하고 배경 만들기</button>
+      <div class="btn-grid">
+        <button id="shuffleBtn" type="button" class="ghost">시드 변경</button>
+        <button id="reshuffleBtn" type="button" class="ghost">배치 변경</button>
+        <button id="randomBtn" type="button" class="ghost">전체 랜덤</button>
+        <button id="saveBtn" type="button" class="ghost">이미지 저장</button>
+        <button id="clearBtn" type="button" class="ghost">초기화</button>
       </div>
 
-      <button id="runBtn" type="button">색상 추출하고 프롬프트 만들기</button>
-      <button id="rerollBtn" type="button" class="ghost">같은 팔레트로 다시 변주하기</button>
-      <button id="demoBtn" type="button" class="ghost">샘플 데이터로 테스트</button>
-      <div id="status" class="status warn">준비됨. 먼저 샘플 데이터로 테스트를 눌러보면 된다.</div>
+      <div id="status" class="status warn">준비됨. 이미지를 넣고 버튼을 누르면 팔레트와 배경이 생성된다.</div>
       <div class="hint-box">
-        <div><span class="pill">JSON 삭제</span><span class="pill">번짐 옵션 추가</span><span class="pill">같은 팔레트 재변주</span></div>
-        같은 사진이라도 번짐 스타일과 문장 구성을 다시 섞어서 더 덜 정형화된 프롬프트를 만들 수 있게 바꿨다.
+        <div><span class="pill">그라데이션 전용</span><span class="pill">패널형 UI</span><span class="pill">배치 재랜덤</span></div>
+        기존 배경 생성기 기능은 유지하되, 지난 버전의 단순한 패널 형식과 톤에 맞춰 정리했다. 사진은 색 추출과 미리보기 오버레이에만 사용되고 저장 파일에는 배경만 포함된다.
       </div>
     </div>
 
     <div class="panel">
       <div class="title">미리보기</div>
-      <div class="preview" id="previewBox">
-        <div id="previewPlaceholder" class="muted">업로드한 이미지가 여기 표시된다.</div>
-        <img id="previewImg" style="display:none;" alt="preview">
+      <div class="preview">
+        <div class="frame" id="frame">
+          <canvas id="bgCanvas" width="1080" height="1920"></canvas>
+          <img id="overlayPhoto" alt="photo overlay" />
+        </div>
       </div>
+      <div class="preview-note">사진 오버레이는 참고용 미리보기다. 저장 결과는 배경 캔버스만 내보낸다.</div>
     </div>
 
     <div class="panel">
       <div class="title">추출 팔레트</div>
       <div id="swatches" class="swatches"></div>
     </div>
-
-    <div class="panel">
-      <div class="head">
-        <div class="title" style="margin:0;">생성 프롬프트</div>
-        <button id="copyPromptBtn" class="copybtn" type="button">복사</button>
-      </div>
-      <textarea id="promptOutput" placeholder="여기에 프롬프트가 생성된다."></textarea>
-    </div>
-
-    <div class="panel">
-      <div class="head">
-        <div class="title" style="margin:0;">네거티브 프롬프트</div>
-        <button id="copyNegativeBtn" class="copybtn" type="button">복사</button>
-      </div>
-      <textarea id="negativeOutput"></textarea>
-    </div>
   </div>
 
-<script>
-(function(){
-  const NEG = '인물, 동물, 꽃, 풍경, 건물, 제품 사진 느낌, 문자, 로고, 타이포그래피, 아이콘, 프레임, 선명한 외곽선, 기하학 패턴, 벡터 그래픽, 만화풍, 포토리얼 오브젝트, 아크릴 광택, 유화의 두꺼운 질감, 금박, 플라스틱 표면, 과도한 디지털 노이즈, 과장된 3D 렌더링';
+  <script>
+  (function(){
+    const $ = (id) => document.getElementById(id);
 
-  const imageInput = document.getElementById('imageInput');
-  const paletteCount = document.getElementById('paletteCount');
-  const layoutMode = document.getElementById('layoutMode');
-  const intensityMode = document.getElementById('intensityMode');
-  const aspectMode = document.getElementById('aspectMode');
-  const bleedMode = document.getElementById('bleedMode');
-  const variationMode = document.getElementById('variationMode');
-  const runBtn = document.getElementById('runBtn');
-  const rerollBtn = document.getElementById('rerollBtn');
-  const demoBtn = document.getElementById('demoBtn');
-  const statusEl = document.getElementById('status');
-  const previewImg = document.getElementById('previewImg');
-  const previewPlaceholder = document.getElementById('previewPlaceholder');
-  const swatches = document.getElementById('swatches');
-  const promptOutput = document.getElementById('promptOutput');
-  const negativeOutput = document.getElementById('negativeOutput');
-  const copyPromptBtn = document.getElementById('copyPromptBtn');
-  const copyNegativeBtn = document.getElementById('copyNegativeBtn');
+    const aspectMeta = {
+      story: { width:1080, height:1920, ratio:'9 / 16' },
+      feed: { width:1080, height:1350, ratio:'4 / 5' },
+      square: { width:1080, height:1080, ratio:'1 / 1' },
+      wide: { width:1600, height:900, ratio:'16 / 9' }
+    };
 
-  negativeOutput.value = NEG;
+    const state = {
+      aspect:'story',
+      mode:'linear',
+      sat:1,
+      blur:60,
+      rough:0.45,
+      curve:0.4,
+      flowStyle:'straight',
+      k:4,
+      ang:135,
+      bokeh:true,
+      seed:Math.random(),
+      palette:['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']
+    };
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    let pendingFile = null;
 
-  let currentPalette = null;
-  let currentImageSrc = '';
+    const imageInput = $('imageInput');
+    const aspectMode = $('aspectMode');
+    const modeMode = $('modeMode');
+    const paletteCount = $('paletteCount');
+    const bokehMode = $('bokehMode');
+    const satRange = $('satRange');
+    const blurRange = $('blurRange');
+    const roughRange = $('roughRange');
+    const angleRange = $('angleRange');
+    const flowStyleMode = $('flowStyleMode');
+    const curveRange = $('curveRange');
+    const applyBtn = $('applyBtn');
+    const shuffleBtn = $('shuffleBtn');
+    const reshuffleBtn = $('reshuffleBtn');
+    const randomBtn = $('randomBtn');
+    const saveBtn = $('saveBtn');
+    const clearBtn = $('clearBtn');
+    const statusEl = $('status');
+    const frame = $('frame');
+    const canvas = $('bgCanvas');
+    const overlayPhoto = $('overlayPhoto');
+    const swatches = $('swatches');
+    const flowControls = $('flowControls');
+    const saveModal = $('saveModal');
+    const saveImg = $('saveImg');
+    const closeModal = $('closeModal');
 
-  function setStatus(text, kind){
-    statusEl.textContent = text;
-    statusEl.className = 'status ' + (kind || 'warn');
-  }
+    function setStatus(text, kind){
+      statusEl.textContent = text;
+      statusEl.className = 'status ' + (kind || 'warn');
+    }
 
-  function rgbToHex(r,g,b){
-    return '#' + [r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('').toUpperCase();
-  }
+    function updateVal(id, text){ $(id).textContent = text; }
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+    function mix(a,b,t){ return a + (b-a) * t; }
 
-  function rgbToHsl(r,g,b){
-    r/=255; g/=255; b/=255;
-    const max=Math.max(r,g,b), min=Math.min(r,g,b);
-    let h=0, s=0;
-    const l=(max+min)/2;
-    if(max!==min){
-      const d=max-min;
-      s=l>0.5 ? d/(2-max-min) : d/(max+min);
-      switch(max){
-        case r: h=(g-b)/d + (g<b?6:0); break;
-        case g: h=(b-r)/d + 2; break;
-        default: h=(r-g)/d + 4; break;
+    function rgb2hsl(r,g,b){
+      r/=255; g/=255; b/=255;
+      const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+      let h=0, s=0;
+      const l=(mx+mn)/2;
+      if(mx!==mn){
+        const d=mx-mn;
+        s=l>0.5 ? d/(2-mx-mn) : d/(mx+mn);
+        switch(mx){
+          case r: h=(g-b)/d + (g<b?6:0); break;
+          case g: h=(b-r)/d + 2; break;
+          default: h=(r-g)/d + 4; break;
+        }
+        h*=60;
       }
-      h/=6;
-    }
-    return {h:h*360, s:s*100, l:l*100};
-  }
-
-  function describeColor(r,g,b){
-    const hsl = rgbToHsl(r,g,b);
-    const h=hsl.h, s=hsl.s, l=hsl.l;
-    if (s < 8 && l > 92) return '유백색';
-    if (s < 10 && l < 18) return '먹빛 차콜';
-    if (s < 12) return l > 65 ? '옅은 회색' : '차분한 회색';
-
-    let base = '색';
-    if (h < 15 || h >= 345) base = s > 55 ? '레드' : '로즈 레드';
-    else if (h < 40) base = s < 45 ? '황토색' : '오렌지';
-    else if (h < 65) base = '옐로';
-    else if (h < 95) base = '황록색';
-    else if (h < 150) base = l > 72 ? '민트 그린' : '그린';
-    else if (h < 190) base = s < 35 ? '청록 회색' : '청록색';
-    else if (h < 220) base = l > 72 ? '아쿠아 블루' : '하늘색';
-    else if (h < 255) base = '블루';
-    else if (h < 290) base = l > 72 ? '연보라' : '보라색';
-    else if (h < 330) base = s > 55 ? '마젠타' : '핑크';
-    else base = '로즈 핑크';
-
-    let prefix = '';
-    if (l > 80) prefix = '옅은 ';
-    else if (l < 28) prefix = '짙은 ';
-    else if (s < 28) prefix = '탁한 ';
-    else if (s > 70) prefix = '선명한 ';
-    else prefix = '부드러운 ';
-
-    return (prefix + base).trim();
-  }
-
-  function shuffle(arr){
-    const a = arr.slice();
-    for(let i=a.length-1; i>0; i--){
-      const j = Math.floor(Math.random() * (i+1));
-      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-    }
-    return a;
-  }
-
-  function pick(arr){
-    return arr[Math.floor(Math.random() * arr.length)];
-  }
-
-  function pickMany(arr, count){
-    return shuffle(arr).slice(0, Math.min(count, arr.length));
-  }
-
-  function renderSwatches(palette){
-    swatches.innerHTML = '';
-    palette.forEach(function(c){
-      const div = document.createElement('div');
-      div.className = 'swatch';
-      div.innerHTML = '<div class="color" style="background:'+c.hex+'"></div>'
-        + '<div class="meta"><strong>'+c.role+'</strong><div>'+c.label+'</div><div>'+c.hex+'</div><div>'+c.ratio+'%</div></div>';
-      swatches.appendChild(div);
-    });
-  }
-
-  function extractPalette(img, count){
-    const maxSide = 140;
-    const scale = Math.min(maxSide / img.naturalWidth, maxSide / img.naturalHeight, 1);
-    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    const data = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    const buckets = {};
-    const step = 20;
-
-    for(let i=0; i<data.length; i+=step){
-      const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
-      if(a<200) continue;
-      const hsl = rgbToHsl(r,g,b);
-      if(hsl.l > 98 && hsl.s < 5) continue;
-
-      const key = [
-        Math.floor(hsl.h / 24),
-        Math.floor(hsl.s / 18),
-        Math.floor(hsl.l / 18)
-      ].join('_');
-
-      if(!buckets[key]) buckets[key] = {r:0,g:0,b:0,count:0,s:0,l:0};
-      buckets[key].r += r;
-      buckets[key].g += g;
-      buckets[key].b += b;
-      buckets[key].s += hsl.s;
-      buckets[key].l += hsl.l;
-      buckets[key].count += 1;
+      return [h,s,l];
     }
 
-    let arr = Object.keys(buckets).map(key => {
-      const x = buckets[key];
-      return {
-        r: Math.round(x.r / x.count),
-        g: Math.round(x.g / x.count),
-        b: Math.round(x.b / x.count),
-        s: x.s / x.count,
-        l: x.l / x.count,
-        count: x.count
+    function hsl2rgb(h,s,l){
+      h/=360;
+      const hue2 = (p,q,t) => {
+        if(t<0) t+=1;
+        if(t>1) t-=1;
+        if(t<1/6) return p + (q-p)*6*t;
+        if(t<1/2) return q;
+        if(t<2/3) return p + (q-p)*(2/3-t)*6;
+        return p;
       };
-    }).sort((a,b) => b.count - a.count);
-
-    arr = arr.filter(c => !(c.l > 95 && c.s < 8));
-
-    const chosen = [];
-    for(let i=0; i<arr.length; i++){
-      const c = arr[i];
-      let ok = true;
-      for(let j=0; j<chosen.length; j++){
-        const d = Math.sqrt(
-          Math.pow(c.r - chosen[j].r, 2) +
-          Math.pow(c.g - chosen[j].g, 2) +
-          Math.pow(c.b - chosen[j].b, 2)
-        );
-        if(d < 34){ ok = false; break; }
+      let r,g,b;
+      if(s===0){ r=g=b=l; }
+      else {
+        const q = l<0.5 ? l*(1+s) : l+s-l*s;
+        const p = 2*l-q;
+        r=hue2(p,q,h+1/3);
+        g=hue2(p,q,h);
+        b=hue2(p,q,h-1/3);
       }
-      if(ok) chosen.push(c);
-      if(chosen.length >= count) break;
-    }
-    while(chosen.length < count && chosen.length < arr.length){
-      chosen.push(arr[chosen.length]);
+      return [r*255,g*255,b*255];
     }
 
-    const total = chosen.reduce((sum,c)=>sum+c.count,0) || 1;
-    return chosen.map((c, idx) => ({
-      role: idx === 0 ? '주조색' : idx === 1 ? '보조색' : '강조색',
-      label: describeColor(c.r,c.g,c.b),
-      hex: rgbToHex(c.r,c.g,c.b),
-      ratio: Math.round(c.count / total * 100)
-    }));
-  }
+    function rgb2hex(r,g,b){
+      return '#' + [r,g,b].map(v => clamp(v|0,0,255).toString(16).padStart(2,'0')).join('');
+    }
 
-  function loadImage(file){
-    return new Promise(function(resolve, reject){
-      const reader = new FileReader();
-      reader.onload = function(e){
+    function hex2rgb(hex){
+      const h = hex.replace('#','');
+      return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+    }
+
+    function adjustSat(hex, mult){
+      const [r,g,b] = hex2rgb(hex);
+      const [h,s,l] = rgb2hsl(r,g,b);
+      const [nr,ng,nb] = hsl2rgb(h, clamp(s*mult,0,1), l);
+      return rgb2hex(nr,ng,nb);
+    }
+
+    function softenRGB(rgb, amt, paper=[253,251,246]){
+      return [mix(rgb[0],paper[0],amt), mix(rgb[1],paper[1],amt), mix(rgb[2],paper[2],amt)];
+    }
+
+    function rgba(rgb, a){
+      return 'rgba(' + (rgb[0]|0) + ',' + (rgb[1]|0) + ',' + (rgb[2]|0) + ',' + a + ')';
+    }
+
+    function rng(seed){
+      let s = Math.floor(seed * 1e9) || 1;
+      return function(){
+        s = (s * 1664525 + 1013904223) % 4294967296;
+        return s / 4294967296;
+      };
+    }
+
+    function extractFromCanvas(src, k){
+      const W = 120;
+      const H = Math.max(1, Math.round(120 * src.height / src.width));
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const x = c.getContext('2d', {willReadFrequently:true});
+      x.drawImage(src, 0, 0, W, H);
+      let d;
+      try { d = x.getImageData(0,0,W,H).data; } catch (e) { return []; }
+
+      const pass = (minS, minL, maxL) => {
+        const buckets = {};
+        for(let i=0; i<d.length; i+=4){
+          const r=d[i], g=d[i+1], b=d[i+2], a=d[i+3];
+          if(a<200) continue;
+          const [h,s,l] = rgb2hsl(r,g,b);
+          if(l<minL || l>maxL || s<minS) continue;
+          const key = Math.round(h/15)*15 + '-' + Math.round(l*6);
+          if(!buckets[key]) buckets[key] = {n:0,r:0,g:0,b:0,s:0};
+          const o = buckets[key];
+          o.n++; o.r+=r; o.g+=g; o.b+=b; o.s+=s;
+        }
+        return Object.values(buckets).map(o => ({
+          score:o.n*(0.4+(o.s/o.n)*0.9),
+          rgb:[o.r/o.n,o.g/o.n,o.b/o.n]
+        })).sort((a,b) => b.score-a.score);
+      };
+
+      let arr = pass(0.15,0.1,0.92);
+      if(arr.length<k) arr = pass(0.05,0.05,0.95);
+      if(arr.length<k) arr = pass(0,0.02,0.99);
+      const out = arr.slice(0,k).map(o => rgb2hex(...o.rgb.map(Math.round)));
+      while(out.length < k && out.length > 0) out.push(out[out.length-1]);
+      return out;
+    }
+
+    function describeColor(hex){
+      const [r,g,b] = hex2rgb(hex);
+      const [h,s,l] = rgb2hsl(r,g,b);
+      const sat = s*100;
+      const lig = l*100;
+      if(sat < 8 && lig > 92) return '유백색';
+      if(sat < 10 && lig < 18) return '먹빛 차콜';
+      if(sat < 12) return lig > 65 ? '옅은 회색' : '차분한 회색';
+      let base = '색';
+      if(h < 15 || h >= 345) base = sat > 55 ? '레드' : '로즈 레드';
+      else if(h < 40) base = sat < 45 ? '황토색' : '오렌지';
+      else if(h < 65) base = '옐로';
+      else if(h < 95) base = '황록색';
+      else if(h < 150) base = lig > 72 ? '민트 그린' : '그린';
+      else if(h < 190) base = sat < 35 ? '청록 회색' : '청록색';
+      else if(h < 220) base = lig > 72 ? '아쿠아 블루' : '하늘색';
+      else if(h < 255) base = '블루';
+      else if(h < 290) base = lig > 72 ? '연보라' : '보라색';
+      else if(h < 330) base = sat > 55 ? '마젠타' : '핑크';
+      else base = '로즈 핑크';
+      let prefix = '';
+      if(lig > 80) prefix = '옅은 ';
+      else if(lig < 28) prefix = '짙은 ';
+      else if(sat < 28) prefix = '탁한 ';
+      else if(sat > 70) prefix = '선명한 ';
+      else prefix = '부드러운 ';
+      return (prefix + base).trim();
+    }
+
+    function renderPalette(){
+      swatches.innerHTML = '';
+      const list = state.palette.slice(0, Math.max(2, state.k));
+      list.forEach((hex, idx) => {
+        const card = document.createElement('div');
+        card.className = 'swatch';
+        const role = idx === 0 ? '주조색' : idx === 1 ? '보조색' : '강조색';
+        card.innerHTML =
+          '<div class="color" style="background:' + hex + '"></div>' +
+          '<div class="meta"><strong>' + role + '</strong><div>' + describeColor(hex) + '</div><div>' + hex.toUpperCase() + '</div></div>';
+        swatches.appendChild(card);
+      });
+    }
+
+    function resizeCanvas(){
+      const meta = aspectMeta[state.aspect] || aspectMeta.story;
+      canvas.width = meta.width;
+      canvas.height = meta.height;
+      frame.style.aspectRatio = meta.ratio;
+    }
+
+    function paintBackground(ctx, W, H, colors, opts){
+      const {mode, rough, ang, bokeh, seed, curve, flowStyle} = opts;
+      const rand = rng(seed);
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = colors[0] || '#d7d4ff';
+      ctx.fillRect(0,0,W,H);
+
+      if(mode === 'linear'){
+        const rad = ang * Math.PI / 180;
+        const cx = W/2, cy = H/2, len = Math.hypot(W,H);
+        const x1 = cx - Math.cos(rad)*len/2, y1 = cy - Math.sin(rad)*len/2;
+        const x2 = cx + Math.cos(rad)*len/2, y2 = cy + Math.sin(rad)*len/2;
+        const g = ctx.createLinearGradient(x1,y1,x2,y2);
+        colors.forEach((c,i) => g.addColorStop(i/(colors.length-1 || 1), c));
+        ctx.fillStyle = g;
+        ctx.fillRect(0,0,W,H);
+      } else if(mode === 'radial'){
+        ctx.fillStyle = '#fbfaf7';
+        ctx.fillRect(0,0,W,H);
+        colors.forEach((c) => {
+          const cx = W*(0.2+rand()*0.6), cy = H*(0.2+rand()*0.6);
+          const r = Math.max(W,H) * (0.4 + rand()*0.45);
+          const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+          g.addColorStop(0, c);
+          g.addColorStop(1, c + '00');
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = g;
+          ctx.fillRect(0,0,W,H);
+        });
+        ctx.globalAlpha = 1;
+      } else if(mode === 'mesh'){
+        ctx.fillStyle = '#faf8f4';
+        ctx.fillRect(0,0,W,H);
+        for(let i=0; i<colors.length*2; i++){
+          const c = colors[i % colors.length];
+          const cx = rand()*W, cy = rand()*H;
+          const r = (0.35 + rand()*0.48) * Math.max(W,H);
+          const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+          g.addColorStop(0,c);
+          g.addColorStop(1,c+'00');
+          ctx.globalAlpha = 0.86;
+          ctx.fillStyle = g;
+          ctx.fillRect(0,0,W,H);
+        }
+        ctx.globalAlpha = 1;
+      } else if(mode === 'airy'){
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(0,0,W,H);
+        colors.forEach((hex) => {
+          const rgb = softenRGB(hex2rgb(hex), 0.35);
+          const cx = W*(0.15+rand()*0.7), cy = H*(0.15+rand()*0.7);
+          const rad = Math.max(W,H)*(0.6+rand()*0.3);
+          const g = ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+          g.addColorStop(0, rgba(rgb, 0.85));
+          g.addColorStop(0.5, rgba(rgb, 0.45));
+          g.addColorStop(1, rgba(rgb, 0));
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = g;
+          ctx.fillRect(0,0,W,H);
+        });
+        ctx.globalAlpha = 1;
+        const n = 4 + Math.round(rand()*3);
+        for(let i=0; i<n; i++){
+          const cx = rand()*W, cy = rand()*H;
+          const br = Math.max(W,H)*(0.12+rand()*0.18);
+          const g = ctx.createRadialGradient(cx,cy,0,cx,cy,br);
+          g.addColorStop(0,'rgba(255,255,255,' + (0.55+rand()*0.3) + ')');
+          g.addColorStop(0.3,'rgba(255,255,255,0.3)');
+          g.addColorStop(1,'rgba(255,255,255,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(0,0,W,H);
+        }
+      } else if(mode === 'flow'){
+        ctx.fillStyle = '#fdfbf4';
+        ctx.fillRect(0,0,W,H);
+        const diag = Math.hypot(W,H);
+        const angRad = ang * Math.PI / 180;
+        const fx = Math.cos(angRad), fy = Math.sin(angRad);
+        const nx = -fy, ny = fx;
+        const C = curve;
+
+        function flowAngleAt(x,y){
+          if(flowStyle === 'straight') return angRad;
+          if(flowStyle === 'curve'){
+            const cross = ((x-W/2)*nx + (y-H/2)*ny) / Math.min(W,H);
+            return angRad + Math.sin(cross*Math.PI*2) * C * Math.PI * 0.35;
+          }
+          if(flowStyle === 'swirl'){
+            const dx=x-W/2, dy=y-H/2;
+            const r = Math.hypot(dx,dy) / (Math.min(W,H)*0.5);
+            const tangent = Math.atan2(dy,dx) + Math.PI/2;
+            const swirlMix = Math.min(1, r*0.7 + C*0.5);
+            return angRad*(1-C*swirlMix) + tangent*(C*swirlMix);
+          }
+          const n = Math.sin(x*0.008+seed*10) + Math.cos(y*0.011+seed*7)*0.7;
+          return angRad + n * C * Math.PI * 0.5;
+        }
+
+        colors.forEach((hex, i) => {
+          const [r,g,b] = hex2rgb(hex);
+          const t = colors.length===1 ? 0.5 : i/(colors.length-1);
+          const cross = (t-0.5) * Math.min(W,H) * 0.7;
+          const cx = W/2 + nx*cross + (rand()-0.5)*diag*0.1;
+          const cy = H/2 + ny*cross + (rand()-0.5)*diag*0.1;
+          const ribbons = 3 + Math.round(rand()*2);
+          for(let rb=0; rb<ribbons; rb++){
+            const rx = diag*(0.45+rand()*0.2);
+            const ry = Math.min(W,H)*(0.14+rand()*0.1);
+            const ox = cx + fx*(rand()-0.5)*diag*0.2 + nx*(rand()-0.5)*ry*0.3;
+            const oy = cy + fy*(rand()-0.5)*diag*0.2 + ny*(rand()-0.5)*ry*0.3;
+            ctx.save();
+            ctx.translate(ox,oy);
+            ctx.rotate(flowAngleAt(ox,oy));
+            const grd = ctx.createRadialGradient(0,0,0,0,0,Math.max(rx,ry));
+            const a = rb===0 ? 0.7 : 0.4;
+            grd.addColorStop(0,'rgba(' + r + ',' + g + ',' + b + ',' + a + ')');
+            grd.addColorStop(0.45,'rgba(' + r + ',' + g + ',' + b + ',' + (a*0.7) + ')');
+            grd.addColorStop(0.85,'rgba(' + r + ',' + g + ',' + b + ',' + (a*0.15) + ')');
+            grd.addColorStop(1,'rgba(' + r + ',' + g + ',' + b + ',0)');
+            ctx.fillStyle = grd;
+            ctx.scale(rx/Math.max(rx,ry), ry/Math.max(rx,ry));
+            const mR = Math.max(rx,ry);
+            ctx.fillRect(-mR*1.5, -mR*1.5, mR*3, mR*3);
+            ctx.restore();
+          }
+        });
+
+        const streakCount = 18 + Math.round(rough*14);
+        for(let s=0; s<streakCount; s++){
+          const col = colors[Math.floor(rand()*colors.length)];
+          const [r,g,b] = hex2rgb(col);
+          const cx = rand()*W, cy = rand()*H;
+          const len = diag*(0.25+rand()*0.35);
+          const wid = Math.min(W,H)*(0.015+rand()*0.04);
+          ctx.save();
+          ctx.translate(cx,cy);
+          ctx.rotate(flowAngleAt(cx,cy) + (rand()-0.5)*0.2);
+          ctx.scale(len/wid,1);
+          const grd = ctx.createRadialGradient(0,0,0,0,0,wid);
+          const a = 0.12+rand()*0.18;
+          grd.addColorStop(0,'rgba(' + r + ',' + g + ',' + b + ',' + a + ')');
+          grd.addColorStop(0.6,'rgba(' + r + ',' + g + ',' + b + ',' + (a*0.4) + ')');
+          grd.addColorStop(1,'rgba(' + r + ',' + g + ',' + b + ',0)');
+          ctx.fillStyle = grd;
+          ctx.fillRect(-wid*1.5, -wid*1.5, wid*3, wid*3);
+          ctx.restore();
+        }
+
+        ctx.globalCompositeOperation = 'screen';
+        const lights = 5 + Math.round(rand()*4);
+        for(let l=0; l<lights; l++){
+          const cx = rand()*W, cy = rand()*H;
+          const len = diag*(0.2+rand()*0.3);
+          const wid = Math.min(W,H)*(0.025+rand()*0.04);
+          ctx.save();
+          ctx.translate(cx,cy);
+          ctx.rotate(flowAngleAt(cx,cy) + (rand()-0.5)*0.15);
+          ctx.scale(len/wid,1);
+          const grd = ctx.createRadialGradient(0,0,0,0,0,wid);
+          grd.addColorStop(0,'rgba(255,255,255,0.28)');
+          grd.addColorStop(0.55,'rgba(255,255,255,0.1)');
+          grd.addColorStop(1,'rgba(255,255,255,0)');
+          ctx.fillStyle = grd;
+          ctx.fillRect(-wid*1.5, -wid*1.5, wid*3, wid*3);
+          ctx.restore();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      if(bokeh && mode !== 'airy' && mode !== 'flow'){
+        const n = 1 + Math.round(rand());
+        for(let i=0; i<n; i++){
+          let cx, cy;
+          do {
+            cx = rand()*W;
+            cy = rand()*H;
+          } while(Math.hypot(cx-W/2, cy-H/2) < Math.min(W,H)*0.2);
+          const r = Math.max(W,H)*(0.15+rand()*0.1);
+          const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+          g.addColorStop(0,'rgba(255,255,255,0.35)');
+          g.addColorStop(1,'rgba(255,255,255,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(0,0,W,H);
+        }
+      }
+    }
+
+    function render(){
+      resizeCanvas();
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      const k = Math.min(state.k, state.palette.length || state.k);
+      const cols = (state.palette.slice(0,k).length ? state.palette.slice(0,k) : ['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9']).map(c => adjustSat(c, state.sat));
+      const off = document.createElement('canvas');
+      off.width = W;
+      off.height = H;
+      paintBackground(off.getContext('2d'), W, H, cols, {
+        mode:state.mode,
+        rough:state.rough,
+        ang:state.ang,
+        bokeh:state.bokeh,
+        seed:state.seed,
+        curve:state.curve,
+        flowStyle:state.flowStyle
+      });
+      ctx.clearRect(0,0,W,H);
+      const finalBlur = state.mode === 'flow' ? Math.min(4 + state.blur * 0.05, 12) : state.blur;
+      ctx.filter = 'blur(' + finalBlur + 'px) saturate(' + state.sat + ')';
+      const pad = Math.max(40, finalBlur * 2);
+      ctx.drawImage(off, -pad, -pad, W + pad*2, H + pad*2);
+      ctx.filter = 'none';
+      renderPalette();
+    }
+
+    function updateFlowUI(){
+      flowControls.classList.toggle('hidden', state.mode !== 'flow');
+    }
+
+    function updateOverlay(src){
+      if(!src){
+        overlayPhoto.removeAttribute('src');
+        overlayPhoto.style.display = 'none';
+        return;
+      }
+      overlayPhoto.src = src;
+      overlayPhoto.style.display = 'block';
+    }
+
+    function readFileAsDataURL(file){
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = () => reject(new Error('파일을 읽지 못했다.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImage(dataUrl){
+      return new Promise((resolve, reject) => {
         const img = new Image();
-        img.onload = function(){ resolve(img); };
-        img.onerror = function(){ reject(new Error('이미지를 열지 못했다.')); };
-        img.src = e.target.result;
-      };
-      reader.onerror = function(){ reject(new Error('파일을 읽지 못했다.')); };
-      reader.readAsDataURL(file);
-    });
-  }
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('이미지를 열지 못했다.'));
+        img.src = dataUrl;
+      });
+    }
 
-  function buildBleedSentence(mode, variation){
-    const banks = {
-      '안개형 워시': [
-        '물이 넓게 번진 안개형 워시를 중심으로 가장자리 경계를 거의 지우듯 흐리게 만든다.',
-        '옅은 수분층 위에 안료가 미세하게 퍼지는 안개형 번짐을 크게 잡고, 중심부는 매우 부드럽게 비워 둔다.',
-        '젖은 종이 위에서 안료가 구름처럼 풀어지는 안개형 확산을 주요 효과로 사용한다.'
-      ],
-      '블룸 강조': [
-        '물자국이 마르며 생기는 블룸을 여러 곳에 남기고, 농담 차이가 있는 꽃잎형 번짐 자국을 살린다.',
-        '가장자리 블룸과 둥근 수채화 꽃번짐을 의도적으로 강조해 우연한 물무늬를 만든다.',
-        '번짐 경계마다 연한 블룸 자국이 피어오르듯 남게 하고, 작은 안료 고임을 군데군데 배치한다.'
-      ],
-      '역번짐 강조': [
-        '건조 중 밀려난 안료 경계와 역번짐을 분명히 남겨 수채화 특유의 불규칙한 테두리를 만든다.',
-        '마르는 속도의 차이로 생기는 backrun과 역번짐 흔적을 화면 곳곳에 섞는다.',
-        '얇은 워시 위에 물이 다시 스며들며 생기는 역번짐을 예측 불가하게 배치한다.'
-      ],
-      '가장자리 풀링': [
-        '안료가 가장자리에 모여 진해지는 풀링 효과를 살리고, 내부는 상대적으로 투명하게 남긴다.',
-        '색면 외곽에 안료가 얇게 둘러앉는 가장자리 고임을 강조해 종이 결이 더 드러나게 한다.',
-        '워시 가장자리에서 안료가 눌어붙듯 짙어지는 풀링 흔적을 주요 질감으로 사용한다.'
-      ],
-      '다층 워시': [
-        '옅은 워시 위에 또 다른 반투명 워시를 겹쳐 깊이감 있는 다층 번짐을 만든다.',
-        '투명한 색층이 두세 겹씩 포개지며 아래층이 은근히 비치도록 다층 워시를 구성한다.',
-        '얇은 층과 중간 농도의 층이 시간차를 두고 겹쳐지는 다층 수채화 질감을 만든다.'
-      ],
-      '입자 확산': [
-        '안료 입자가 종이 결에 걸리듯 퍼지는 그레뉼레이션과 미세한 입자 확산을 살린다.',
-        '고운 입자감과 엷은 스펙클이 번짐 내부에 남아 종이 표면의 거칠기를 드러내게 한다.',
-        '부드러운 워시 속에서도 안료 입자가 미세하게 분리되는 입자 확산을 섞는다.'
-      ],
-      '비대칭 대형 번짐': [
-        '큰 번짐 덩어리를 화면 한쪽에 치우치게 두고, 작은 번짐과 여백을 비대칭으로 배치한다.',
-        '한쪽 모서리에서 크게 터진 물 번짐과 반대편의 얇은 여백이 불균형하게 공존하도록 만든다.',
-        '대형 색면 하나와 잔잔한 보조 번짐 몇 개가 비대칭 구조를 이루게 한다.'
-      ]
-    };
-
-    const autoModes = Object.keys(banks);
-    let selectedModes = [];
-    if (mode === '자동 랜덤') {
-      const pickCount = variation === '강함' ? 3 : 2;
-      selectedModes = pickMany(autoModes, pickCount);
-    } else {
-      selectedModes = [mode];
-      if (variation !== '안정적') {
-        const otherModes = autoModes.filter(x => x !== mode);
-        selectedModes = selectedModes.concat(pickMany(otherModes, variation === '강함' ? 2 : 1));
+    async function applyImage(){
+      if(!pendingFile){
+        setStatus('먼저 이미지를 업로드해야 한다.', 'err');
+        return;
+      }
+      applyBtn.disabled = true;
+      setStatus('이미지를 읽는 중이다...', 'warn');
+      try{
+        const src = await readFileAsDataURL(pendingFile);
+        const img = await loadImage(src);
+        const work = document.createElement('canvas');
+        work.width = img.naturalWidth;
+        work.height = img.naturalHeight;
+        work.getContext('2d').drawImage(img, 0, 0);
+        const pal = extractFromCanvas(work, Number(state.k));
+        if(pal.length >= 2) state.palette = pal;
+        updateOverlay(src);
+        render();
+        setStatus('완료됐다. 추출된 색상으로 배경이 생성되었다.', 'ok');
+      } catch(err){
+        console.error(err);
+        setStatus('오류: ' + (err && err.message ? err.message : '알 수 없는 오류'), 'err');
+      } finally {
+        applyBtn.disabled = false;
       }
     }
 
-    const sentences = [];
-    selectedModes.forEach(function(m){
-      sentences.push(pick(banks[m]));
+    function randomAll(){
+      const modes = ['linear','radial','mesh','airy','flow'];
+      const pickMode = modes[Math.floor(Math.random()*modes.length)];
+      const rand = (a,b) => a + Math.random()*(b-a);
+      const randInt = (a,b) => Math.floor(rand(a,b+1));
+      const baseHue = Math.random()*360;
+      const scheme = ['analogous','complementary','triadic','random'][Math.floor(Math.random()*4)];
+      const numColors = randInt(3,6);
+      const newPal = [];
+      for(let i=0; i<numColors; i++){
+        let h;
+        if(scheme === 'analogous') h = (baseHue + i*rand(15,35)) % 360;
+        else if(scheme === 'complementary') h = (baseHue + (i%2)*180 + rand(-20,20)) % 360;
+        else if(scheme === 'triadic') h = (baseHue + (i%3)*120 + rand(-15,15)) % 360;
+        else h = Math.random()*360;
+        const s = rand(0.45,0.9);
+        const l = rand(0.35,0.7);
+        const [r,g,b] = hsl2rgb(h,s,l);
+        newPal.push(rgb2hex(r|0,g|0,b|0));
+      }
+      state.palette = newPal;
+      state.mode = pickMode;
+      state.seed = Math.random();
+      state.bokeh = Math.random() < 0.7;
+      state.k = Math.min(numColors, randInt(3,6));
+      state.sat = pickMode === 'airy' ? rand(0.7,1.3) : pickMode === 'flow' ? rand(1.4,2.2) : rand(0.8,1.8);
+      state.blur = pickMode === 'flow' ? randInt(10,40) : pickMode === 'airy' ? randInt(40,100) : randInt(30,140);
+      state.rough = pickMode === 'flow' ? rand(0.5,1.0) : rand(0.2,0.8);
+      state.ang = randInt(0,360);
+      state.flowStyle = ['straight','curve','swirl','chaos'][Math.floor(Math.random()*4)];
+      state.curve = rand(0,1);
+      syncControls();
+      render();
+      setStatus('전체 설정을 랜덤으로 다시 구성했다.', 'ok');
+    }
+
+    function syncControls(){
+      aspectMode.value = state.aspect;
+      modeMode.value = state.mode;
+      paletteCount.value = String(state.k);
+      bokehMode.value = state.bokeh ? 'on' : 'off';
+      satRange.value = String(Math.round(state.sat*100));
+      blurRange.value = String(Math.round(state.blur));
+      roughRange.value = String(Math.round(state.rough*100));
+      angleRange.value = String(Math.round(state.ang));
+      flowStyleMode.value = state.flowStyle;
+      curveRange.value = String(Math.round(state.curve*100));
+      updateVal('satVal', Math.round(state.sat*100) + '%');
+      updateVal('blurVal', Math.round(state.blur) + 'px');
+      updateVal('roughVal', Math.round(state.rough*100) + '%');
+      updateVal('angleVal', Math.round(state.ang) + '°');
+      updateVal('curveVal', Math.round(state.curve*100) + '%');
+      updateFlowUI();
+    }
+
+    function shufflePaletteOrder(){
+      const p = [...state.palette];
+      for(let i=p.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        const tmp = p[i]; p[i]=p[j]; p[j]=tmp;
+      }
+      state.palette = p;
+      state.seed = Math.random();
+      render();
+      setStatus('같은 팔레트로 배치만 다시 바꿨다.', 'ok');
+    }
+
+    function saveImage(){
+      saveImg.src = canvas.toDataURL('image/png');
+      saveModal.classList.add('on');
+    }
+
+    function clearAll(){
+      pendingFile = null;
+      imageInput.value = '';
+      state.palette = ['#c9b8ff','#8ec5ff','#ffd1b8','#ffb8d9'];
+      updateOverlay('');
+      render();
+      setStatus('초기화됐다. 새 이미지를 넣어서 다시 만들면 된다.', 'warn');
+    }
+
+    imageInput.addEventListener('change', () => {
+      pendingFile = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
+      if(pendingFile) setStatus('이미지가 선택됐다. 이제 배경 만들기 버튼을 누르면 된다.', 'warn');
     });
 
-    const control = {
-      '안정적': '번짐의 종류는 많지 않게 유지하되, 선택한 효과가 화면 전체의 인상을 지배하도록 정돈한다.',
-      '중간': '번짐의 크기와 방향을 조금씩 달리해 반복감을 줄이고, 동일한 패턴이 복제된 것처럼 보이지 않게 한다.',
-      '강함': '번짐의 방향, 크기, 밀도를 일부러 불균형하게 섞고, 우연적 물흐름이 만든 비정형 흔적을 더 강하게 남긴다.'
-    }[variation];
+    aspectMode.addEventListener('change', () => { state.aspect = aspectMode.value; render(); });
+    modeMode.addEventListener('change', () => { state.mode = modeMode.value; updateFlowUI(); render(); });
+    paletteCount.addEventListener('change', () => { state.k = Number(paletteCount.value); render(); });
+    bokehMode.addEventListener('change', () => { state.bokeh = bokehMode.value === 'on'; render(); });
+    satRange.addEventListener('input', () => { state.sat = Number(satRange.value)/100; updateVal('satVal', satRange.value + '%'); render(); });
+    blurRange.addEventListener('input', () => { state.blur = Number(blurRange.value); updateVal('blurVal', blurRange.value + 'px'); render(); });
+    roughRange.addEventListener('input', () => { state.rough = Number(roughRange.value)/100; updateVal('roughVal', roughRange.value + '%'); render(); });
+    angleRange.addEventListener('input', () => { state.ang = Number(angleRange.value); updateVal('angleVal', angleRange.value + '°'); render(); });
+    flowStyleMode.addEventListener('change', () => { state.flowStyle = flowStyleMode.value; render(); });
+    curveRange.addEventListener('input', () => { state.curve = Number(curveRange.value)/100; updateVal('curveVal', curveRange.value + '%'); render(); });
 
-    return sentences.join(' ') + ' ' + control;
-  }
+    applyBtn.addEventListener('click', applyImage);
+    shuffleBtn.addEventListener('click', () => { state.seed = Math.random(); render(); setStatus('시드를 바꿔 같은 설정 안에서 새 배치를 만들었다.', 'ok'); });
+    reshuffleBtn.addEventListener('click', shufflePaletteOrder);
+    randomBtn.addEventListener('click', randomAll);
+    saveBtn.addEventListener('click', saveImage);
+    clearBtn.addEventListener('click', clearAll);
+    closeModal.addEventListener('click', () => saveModal.classList.remove('on'));
+    saveModal.addEventListener('click', (e) => { if(e.target === saveModal) saveModal.classList.remove('on'); });
 
-  function buildLayoutSentence(layout){
-    const banks = {
-      '중앙 여백형': [
-        '중앙 25~35%는 비교적 밝고 부드러운 여백으로 남기고, 가장자리에서 안쪽으로 안료가 천천히 스며들게 한다.',
-        '텍스트가 올라갈 수 있도록 중앙부를 한층 옅게 비워 두고 바깥쪽에서 안쪽으로 번짐을 모은다.'
-      ],
-      '가장자리 확산형': [
-        '가장자리에 안료가 더 많이 머물고 중앙으로 갈수록 옅어지는 확산형 구도로 만든다.',
-        '외곽의 농도는 더 높이고 내부로 들어오며 천천히 희석되는 가장자리 확산 구조를 쓴다.'
-      ],
-      '대각선 흐름형': [
-        '한쪽 모서리에서 반대편으로 이어지는 대각선 흐름과 긴 워시 자국을 만든다.',
-        '대각선 방향으로 큰 색면이 기울어지며 흘러가고, 중간마다 작은 번짐층이 걸쳐지게 한다.'
-      ],
-      '전면 워시형': [
-        '화면 전체에 넓은 워시를 깔고, 일부 구역만 농담을 달리해 단조로움을 깨뜨린다.',
-        '전면 워시를 기본으로 하되 몇 군데만 농도와 수분량을 달리해 자연스러운 리듬을 만든다.'
-      ]
-    };
-    return pick(banks[layout] || banks['중앙 여백형']);
-  }
+    window.addEventListener('error', (e) => { setStatus('오류: ' + (e.message || '알 수 없는 오류'), 'err'); });
 
-  function buildIntensitySentence(mode){
-    const banks = {
-      '연하고 공기감 있게': [
-        '전체 채도와 명도를 부드럽게 유지하고, 맑고 옅은 레이어 중심의 공기감을 살린다.',
-        '연한 워시와 넓은 여백을 우선해 숨이 트이는 듯한 밝은 수채화 인상을 만든다.'
-      ],
-      '균형감 있게': [
-        '옅은 워시와 중간 농도의 안료층을 균형 있게 섞어 안정된 수채화 분위기를 만든다.',
-        '밝은 부분과 중간 농도의 부분을 균형 있게 배치해 과하게 비거나 과하게 꽉 차지 않게 한다.'
-      ],
-      '대비감 있게': [
-        '밝은 여백과 짙은 안료층의 대비를 분명히 두되, 경계는 여전히 자연스럽게 번지게 한다.',
-        '투명한 구역과 짙게 고인 구역을 함께 두어 시선이 멈추는 대비를 만든다.'
-      ]
-    };
-    return pick(banks[mode] || banks['균형감 있게']);
-  }
-
-  function buildColorSentence(palette){
-    const dominant = palette[0];
-    const secondary = palette[1];
-    const accents = palette.slice(2);
-    const sentences = [];
-
-    const introOptions = [
-      '업로드 이미지에서 추출한 핵심 팔레트는 ' + palette.map(c => c.label + '(' + c.hex + ')').join(', ') + '이다.',
-      '사진에서 읽어낸 핵심 색상은 ' + palette.map(c => c.label + '(' + c.hex + ')').join(', ') + '이며, 이를 추상 수채화로 재해석한다.'
-    ];
-    sentences.push(pick(introOptions));
-
-    if (dominant) {
-      sentences.push(pick([
-        '주조색은 ' + dominant.label + '(' + dominant.hex + ')으로 가장 넓은 워시와 화면의 기본 분위기를 형성한다.',
-        dominant.label + '(' + dominant.hex + ')을 가장 큰 색면에 배치해 전체 온도와 무드를 결정한다.'
-      ]));
-    }
-
-    if (secondary) {
-      sentences.push(pick([
-        '보조색은 ' + secondary.label + '(' + secondary.hex + ')으로 반투명한 레이어를 겹치고 주조색과 부드럽게 섞이게 한다.',
-        secondary.label + '(' + secondary.hex + ')은 주조색 옆에서 천천히 번지며 중간 농도의 층을 만든다.'
-      ]));
-    }
-
-    if (accents.length) {
-      const accentText = accents.map(c => c.label + '(' + c.hex + ')').join(', ');
-      sentences.push(pick([
-        '강조색은 ' + accentText + '을 작은 안료 포인트, 블룸 주변, 가장자리 농도 심화에 제한적으로 사용한다.',
-        accentText + '은 화면 전체를 지배하지 않도록 소량만 쓰고, 포인트 번짐이나 경계 농축에만 활용한다.'
-      ]));
-    } else {
-      sentences.push('강조색은 최소화하고 두세 색 사이의 자연스러운 물 번짐을 중심으로 구성한다.');
-    }
-
-    return sentences.join(' ');
-  }
-
-  function buildBaseSentence(aspect){
-    const intros = [
-      aspect + ' 비율의 인스타그램 배경용 추상 수채화 이미지.',
-      '인스타그램 배경으로 쓰기 좋은 ' + aspect + ' 비율의 비구상 수채화 배경.',
-      aspect + ' 화면을 채우는 추상 수채화 아트 배경.'
-    ];
-    const bodies = [
-      '차가운 압착 수채화지 위에 그린 고해상도 추상 수채화 배경, 탑뷰 스캔 이미지, wet-on-wet 기법, 자연스럽게 번지는 안료, 종이 결과 안료 입자감이 선명하게 보이는 표현.',
-      '냉압 수채화지 표면, 탑뷰 스캔 질감, 젖은 종이 위로 안료가 퍼지는 wet-on-wet 중심 표현, 반투명한 수채 레이어와 종이의 거친 결을 함께 드러낸다.',
-      '차가운 압착 종이의 조직감이 보이는 스캔형 수채화 텍스처, 물과 안료가 겹치며 생기는 반투명 레이어, 자연스러운 가장자리 번짐과 미세한 색 입자 표현.'
-    ];
-    const endings = [
-      '사물이나 인물 없이 오직 색, 물, 안료, 종이, 흐름, 번짐만으로 구성된 비구상 이미지.',
-      '현대적인 아트 프린트 감성의 미니멀 배경으로, 구체적 사물 묘사 없이 색과 물성만 남긴다.',
-      '형태 재현보다 물성과 색감의 흐름을 우선하는 세련된 추상 배경.'
-    ];
-    return pick(intros) + ' ' + pick(bodies) + ' ' + pick(endings);
-  }
-
-  function buildAntiRepetitionSentence(variation){
-    const common = [
-      '원본 사진의 사물, 윤곽, 형태, 실루엣, 구도는 재현하지 말고 핵심 색감과 분위기만 추출한다.',
-      '특정 대상의 외형을 복사하지 말고, 색의 인상과 분위기만 남긴 채 추상 수채화 배경으로 번역한다.'
-    ];
-    const variants = {
-      '안정적': [
-        '형태는 단정하게 유지하되, 동일한 워시 패턴이 기계적으로 반복되지 않게 한다.',
-        '전체 질서는 유지하되, 경계와 번짐은 손으로 그린 수채화처럼 조금씩 불규칙하게 둔다.'
-      ],
-      '중간': [
-        '색면의 크기와 번짐의 방향을 조금씩 어긋나게 두어 템플릿처럼 보이지 않게 한다.',
-        '같은 형태가 반복된 것처럼 보이지 않도록 번짐의 간격과 농담을 자연스럽게 흔든다.'
-      ],
-      '강함': [
-        '매번 생성될 때마다 번짐의 밀도, 길이, 경계 형태가 달라지도록 우연성을 높이고, 지나치게 정돈된 대칭 구조는 피한다.',
-        '비슷한 결과가 반복되지 않도록 물의 흐름, 경계의 찢김, 안료 고임의 위치를 비정형적으로 재배치한다.'
-      ]
-    };
-    return pick(common) + ' ' + pick(variants[variation] || variants['중간']);
-  }
-
-  function makePrompt(palette){
-    const parts = [
-      buildBaseSentence(aspectMode.value),
-      buildColorSentence(palette),
-      buildLayoutSentence(layoutMode.value),
-      buildIntensitySentence(intensityMode.value),
-      buildBleedSentence(bleedMode.value, variationMode.value),
-      buildAntiRepetitionSentence(variationMode.value)
-    ];
-    return parts.join(' ');
-  }
-
-  async function run(){
-    const file = imageInput.files && imageInput.files[0];
-    if(!file){
-      setStatus('먼저 이미지를 업로드해야 한다.', 'err');
-      return;
-    }
-
-    runBtn.disabled = true;
-    runBtn.textContent = '분석 중...';
-    setStatus('이미지를 읽고 색상을 분석하는 중이다...', 'warn');
-
-    try{
-      const img = await loadImage(file);
-      currentImageSrc = img.src;
-      previewImg.src = img.src;
-      previewImg.style.display = 'block';
-      previewPlaceholder.style.display = 'none';
-
-      const count = Number(paletteCount.value || 3);
-      currentPalette = extractPalette(img, count);
-      renderSwatches(currentPalette);
-
-      const prompt = makePrompt(currentPalette);
-      promptOutput.value = prompt;
-      negativeOutput.value = NEG;
-
-      setStatus('완료됐다. 이제 같은 팔레트로 다시 변주하기를 눌러 다른 번짐 결과용 프롬프트를 뽑을 수 있다.', 'ok');
-    }catch(err){
-      console.error(err);
-      setStatus('오류: ' + (err && err.message ? err.message : '알 수 없는 오류'), 'err');
-    }finally{
-      runBtn.disabled = false;
-      runBtn.textContent = '색상 추출하고 프롬프트 만들기';
-    }
-  }
-
-  function reroll(){
-    if(!currentPalette){
-      setStatus('먼저 이미지를 분석하거나 샘플 데이터를 불러와야 한다.', 'err');
-      return;
-    }
-    promptOutput.value = makePrompt(currentPalette);
-    negativeOutput.value = NEG;
-    setStatus('같은 팔레트로 프롬프트를 다시 변주했다.', 'ok');
-  }
-
-  function demo(){
-    currentPalette = [
-      {role:'주조색', label:'부드러운 민트 그린', hex:'#BFD7CA', ratio:40},
-      {role:'보조색', label:'탁한 황토색', hex:'#B28D6E', ratio:32},
-      {role:'강조색', label:'먹빛 차콜', hex:'#2B2A2E', ratio:16},
-      {role:'강조색', label:'부드러운 로즈 핑크', hex:'#C98FA4', ratio:12}
-    ];
-    renderSwatches(currentPalette);
-    previewImg.style.display = 'none';
-    previewPlaceholder.style.display = 'block';
-    previewPlaceholder.textContent = '샘플 데이터 상태다. 업로드 없이 프롬프트 구조를 테스트할 수 있다.';
-    promptOutput.value = makePrompt(currentPalette);
-    negativeOutput.value = NEG;
-    setStatus('샘플 데이터로 테스트했다. 번짐 스타일과 변주 강도를 바꾼 뒤 다시 변주하기를 눌러 차이를 확인하면 된다.', 'ok');
-  }
-
-  async function copyText(text, btn){
-    try{
-      if(navigator.clipboard && window.isSecureContext){
-        await navigator.clipboard.writeText(text);
-      }else{
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      const old = btn.textContent;
-      btn.textContent = '복사됨';
-      setTimeout(function(){ btn.textContent = old; }, 1200);
-    }catch(e){
-      setStatus('복사는 Safari 보안 정책 때문에 실패할 수 있다. 텍스트를 길게 눌러 직접 복사하면 된다.', 'warn');
-    }
-  }
-
-  runBtn.addEventListener('click', run);
-  rerollBtn.addEventListener('click', reroll);
-  demoBtn.addEventListener('click', demo);
-  copyPromptBtn.addEventListener('click', function(){ copyText(promptOutput.value, copyPromptBtn); });
-  copyNegativeBtn.addEventListener('click', function(){ copyText(negativeOutput.value, copyNegativeBtn); });
-
-  window.addEventListener('error', function(e){
-    setStatus('오류: ' + (e.message || '알 수 없는 오류'), 'err');
-  });
-
-  setStatus('준비됨. JSON 출력은 제거했고, 번짐 스타일과 변주 강도를 추가했다.', 'warn');
-})();
-</script>
+    syncControls();
+    render();
+  })();
+  </script>
 </body>
 </html>
